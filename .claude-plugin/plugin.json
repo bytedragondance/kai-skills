@@ -15,6 +15,7 @@
     "./skills/in-progress/claude-handoff",
     "./skills/in-progress/wayfinder",
     "./skills/mine/distill",
+    "./skills/mine/session-recap",
     "./skills/personal/obsidian-vault",
     "./skills/productivity/grilling",
     "./skills/productivity/handoff",
