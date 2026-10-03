@@ -1,1 +1,7 @@
 node_modules
+
+# Python test/import caches.
+__pycache__/
+
+# Local skill-evaluation runs and generated review reports.
+/skills/mine/*-workspace/

@@ -1,0 +1,176 @@
+{
+  "windows": [
+    {
+      "id": 1,
+      "focused": true,
+      "activeWorkspaceId": 10
+    }
+  ],
+  "workspaces": [
+    {
+      "id": 10,
+      "name": "CSI"
+    }
+  ],
+  "tabs": [
+    {
+      "id": 101,
+      "windowId": 1,
+      "index": 0,
+      "title": "Work index",
+      "url": "https://docs.example.test/work-index",
+      "active": false,
+      "pinned": true,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 102,
+      "windowId": 1,
+      "index": 1,
+      "title": "Work ledger",
+      "url": "http://127.0.0.1:8787/",
+      "active": false,
+      "pinned": true,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 103,
+      "windowId": 1,
+      "index": 2,
+      "title": "Developer permissions",
+      "url": "https://admin.example.test/permissions",
+      "active": true,
+      "pinned": false,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 104,
+      "windowId": 1,
+      "index": 3,
+      "title": "Build MR v1",
+      "url": "https://code.example.test/merge_requests/7?to_version=1",
+      "active": false,
+      "pinned": false,
+      "discarded": true,
+      "workspaceId": 10,
+      "groupId": "g-build",
+      "groupTitle": "当前｜Build",
+      "groupColor": "color1"
+    },
+    {
+      "id": 105,
+      "windowId": 1,
+      "index": 4,
+      "title": "Build MR v1 duplicate",
+      "url": "https://code.example.test/merge_requests/7?to_version=1",
+      "active": false,
+      "pinned": false,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 106,
+      "windowId": 1,
+      "index": 5,
+      "title": "Build MR v2",
+      "url": "https://code.example.test/merge_requests/7?to_version=2",
+      "active": false,
+      "pinned": false,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 107,
+      "windowId": 1,
+      "index": 6,
+      "title": "Research plan",
+      "url": "https://docs.example.test/research-plan",
+      "active": false,
+      "pinned": false,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 108,
+      "windowId": 1,
+      "index": 7,
+      "title": "Research result",
+      "url": "https://docs.example.test/research-result",
+      "active": false,
+      "pinned": false,
+      "discarded": true,
+      "workspaceId": 10,
+      "groupId": "g-unnamed",
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 109,
+      "windowId": 1,
+      "index": 8,
+      "title": "Build test",
+      "url": "https://ci.example.test/build/7",
+      "active": false,
+      "pinned": false,
+      "discarded": true,
+      "workspaceId": 10,
+      "groupId": "g-build",
+      "groupTitle": "当前｜Build",
+      "groupColor": "color1"
+    },
+    {
+      "id": 110,
+      "windowId": 1,
+      "index": 9,
+      "title": "Interview notes",
+      "url": "https://notes.example.test/interview",
+      "active": false,
+      "pinned": false,
+      "discarded": false,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    },
+    {
+      "id": 111,
+      "windowId": 1,
+      "index": 10,
+      "title": "Account guide",
+      "url": "https://docs.example.test/account-guide",
+      "active": false,
+      "pinned": false,
+      "discarded": true,
+      "workspaceId": 10,
+      "groupId": null,
+      "groupTitle": "",
+      "groupColor": ""
+    }
+  ],
+  "totals": {
+    "windows": 1,
+    "workspaces": 1,
+    "tabs": 11
+  }
+}

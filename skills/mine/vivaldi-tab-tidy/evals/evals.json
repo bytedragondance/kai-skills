@@ -1,0 +1,49 @@
+{
+  "skill_name": "vivaldi-tab-tidy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Read synthetic-pre.json and propose a tidy plan only. Identify exact duplicates but preserve query-sensitive variants. Do not access or modify a browser.",
+      "expected_output": "A structured plan that closes only tab 105 in favor of 104, preserves tab 106, and explains that query-insensitive matching does not apply outside code.byted.org MR pages.",
+      "files": ["tests/fixtures/synthetic-pre.json"],
+      "expectations": [
+        "Only tab 105 is proposed for automatic closure and its keeper is tab 104.",
+        "Tab 106 is retained because to_version=2 differs from to_version=1 on a non-Codebase host.",
+        "The plan preserves active and pinned tabs."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Create a complete tidy plan for synthetic-pre.json. Keep the two pinned entrypoints ungrouped, group the active permissions page without closing it, reuse the Build stack, and eliminate the unnamed stack. Do not access or modify a browser.",
+      "expected_output": "A validator-compatible plan with one disposition per candidate and complete old-plus-new membership for the existing Build stack.",
+      "files": ["tests/fixtures/synthetic-pre.json"],
+      "expectations": [
+        "Tabs 101 and 102 are protected and kept ungrouped.",
+        "Tab 103 is protected from closure and assigned to a named stack.",
+        "Every candidate has exactly one disposition and no new stack contains only one tab."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Verify synthetic-post.json against synthetic-pre.json and valid-plan.json as a completed Vivaldi tidy. Do not access or modify a browser.",
+      "expected_output": "A passing verification with 11 before, one closed, zero concurrent additions, 10 after, and no unnamed stacks.",
+      "files": ["tests/fixtures/synthetic-pre.json", "tests/fixtures/synthetic-post.json", "tests/fixtures/valid-plan.json"],
+      "expectations": [
+        "Verification passes and reports the reconciled counts 11 - 1 + 0 = 10.",
+        "The active tab remains active and the pinned anchors remain pinned and ungrouped.",
+        "The existing Build stack retains both old members while adding tab 106."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Propose the duplicate actions for three tabs whose URLs are https://code.byted.org/team/project/merge_requests/42?to_version=1, https://code.byted.org/team/project/merge_requests/42/changes?dv_filepath=src%2Fmain.ts, and https://code.byted.org/team/project/merge_requests/43?to_version=1. Assume none is protected and the first tab is the safety-ranked keeper. Do not access or modify a browser.",
+      "expected_output": "A plan that merges only the two copies of MR 42, keeps MR 43 distinct, and normalizes the MR 42 keeper to its parameterless main URL.",
+      "files": [],
+      "expectations": [
+        "The /changes and query variants of MR 42 are treated as one merge request.",
+        "The redundant MR 42 tab uses reason same_merge_request and points to the stated keeper.",
+        "MR 43 remains separate, and the MR 42 keeper target is https://code.byted.org/team/project/merge_requests/42."
+      ]
+    }
+  ]
+}

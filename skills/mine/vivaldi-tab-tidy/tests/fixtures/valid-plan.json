@@ -1,0 +1,41 @@
+{
+  "workspace": 10,
+  "window_id": 1,
+  "protected": [101, 102, 103],
+  "keep_ungrouped": [101, 102, 110],
+  "close": [
+    {
+      "tab_id": 105,
+      "keep_tab_id": 104,
+      "reason": "exact_url_duplicate"
+    }
+  ],
+  "assign": [
+    {
+      "tab_id": 106,
+      "target_stack": "当前｜Build",
+      "target_kind": "existing"
+    },
+    {
+      "tab_id": 107,
+      "target_stack": "当前｜Research",
+      "target_kind": "new"
+    },
+    {
+      "tab_id": 108,
+      "target_stack": "当前｜Research",
+      "target_kind": "new"
+    },
+    {
+      "tab_id": 103,
+      "target_stack": "工具｜账号与权限",
+      "target_kind": "new"
+    },
+    {
+      "tab_id": 111,
+      "target_stack": "工具｜账号与权限",
+      "target_kind": "new"
+    }
+  ],
+  "needs_confirmation": []
+}
