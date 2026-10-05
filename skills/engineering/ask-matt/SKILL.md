@@ -72,3 +72,7 @@ Off the main flow entirely.
 ## Precondition
 
 **`/setup-matt-pocock-skills`** — run before your first engineering flow to configure the issue tracker, triage labels, and doc layout the other skills assume. Custom issue trackers also work.
+
+## Personal project continuation
+
+- `/advance-project` — Resume a project, consolidate parallel work, or close a delivery with current evidence and a usable handoff. It uses the project's existing layout and does not require the engineering-flow setup above. For isolated edits, handle the edit directly.
