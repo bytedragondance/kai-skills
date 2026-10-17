@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 CONFIG = os.path.expanduser("~/.config/portfolio-brief/projects.json")
+BACKLOG_LIMIT = 4000
 STATE_DOC = re.compile(r"(status|state|roadmap|plan|decision|adr|next|orientation|direction|handoff)", re.I)
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "build", "dist", "DerivedData", "__pycache__", ".build"}
 ENV = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"}
@@ -25,28 +26,44 @@ def run(cmd, cwd, timeout=20):
 
 
 def git_info(path):
+    info = {key: None for key in (
+        "branch", "head", "last_commit_at", "last_commit_subject", "days_since_commit",
+        "uncommitted_tracked", "untracked", "ahead", "behind")}
+    info["errors"] = []
     if run(["git", "rev-parse", "--is-inside-work-tree"], path) != "true":
-        return None
+        info["errors"].append("Git repository could not be established; Git facts are unknown")
+        return info
     log = run(["git", "log", "-1", "--format=%h%x1f%cI%x1f%s"], path)
-    head, when, subject = (log.split("\x1f") + ["", "", ""])[:3] if log else ("", "", "")
-    status = run(["git", "status", "--porcelain=v1", "-uall"], path) or ""
-    lines = [l for l in status.splitlines() if l]
+    if log and len(log.split("\x1f", 2)) == 3:
+        head, when, subject = log.split("\x1f", 2)
+        info.update(head=head, last_commit_at=when, last_commit_subject=subject)
+        try:
+            info["days_since_commit"] = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(when)).days
+        except (ValueError, TypeError):
+            info["errors"].append("Last commit date could not be parsed")
+    else:
+        info["errors"].append("Last commit unavailable (including repositories with no commits)")
+    status = run(["git", "status", "--porcelain=v1", "-uall"], path)
+    if status is None:
+        info["errors"].append("git status failed; uncommitted counts are unknown")
+    else:
+        lines = [line for line in status.splitlines() if line]
+        info["uncommitted_tracked"] = sum(not line.startswith("??") for line in lines)
+        info["untracked"] = sum(line.startswith("??") for line in lines)
     counts = run(["git", "rev-list", "--left-right", "--count", "@{upstream}...HEAD"], path)
-    behind, ahead = (counts.split() if counts else (None, None))
-    days = None
-    if when:
-        days = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(when)).days
-    return {
-        "branch": run(["git", "branch", "--show-current"], path),
-        "head": head,
-        "last_commit_at": when or None,
-        "last_commit_subject": subject or None,
-        "days_since_commit": days,
-        "uncommitted_tracked": sum(1 for l in lines if not l.startswith("??")),
-        "untracked": sum(1 for l in lines if l.startswith("??")),
-        "ahead": int(ahead) if ahead is not None else None,
-        "behind": int(behind) if behind is not None else None,
-    }
+    try:
+        behind, ahead = (int(n) for n in counts.split())
+        if min(behind, ahead) < 0:
+            raise ValueError("negative count")
+        info.update(behind=behind, ahead=ahead)
+    except (AttributeError, ValueError):
+        info["errors"].append("Upstream comparison unavailable; ahead/behind unknown (no fetch performed)")
+    branch = run(["git", "branch", "--show-current"], path)
+    if branch is None:
+        info["errors"].append("Current branch could not be read")
+    else:
+        info["branch"] = branch or "(detached HEAD)"
+    return info
 
 
 def state_docs(path, limit=8):
@@ -69,7 +86,11 @@ def backlog(path):
     if not os.path.isdir(os.path.join(path, "backlog")):
         return None
     out = run(["backlog", "task", "list", "--plain"], path)
-    return out[:4000] if out else "backlog/ present but the CLI listing failed"
+    if out is None:
+        return {"text": None, "truncated": False, "total_chars": None,
+                "displayed_chars": 0, "error": "Backlog CLI listing failed; task state unknown"}
+    return {"text": out[:BACKLOG_LIMIT], "truncated": len(out) > BACKLOG_LIMIT,
+            "total_chars": len(out), "displayed_chars": min(len(out), BACKLOG_LIMIT), "error": None}
 
 
 def main():
@@ -77,7 +98,7 @@ def main():
         sys.exit(f"Missing allowlist: {CONFIG}. See the skill's 'Allowlist' section.")
     with open(CONFIG) as f:
         projects = json.load(f)["projects"]
-    out = {"observed_at": dt.datetime.now().isoformat(timespec="minutes"), "projects": []}
+    out = {"observed_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "projects": []}
     for p in projects:
         path = os.path.expanduser(p["path"])
         entry = {"alias": p["alias"], "domain": p.get("domain"), "path": path, "exists": os.path.isdir(path)}
