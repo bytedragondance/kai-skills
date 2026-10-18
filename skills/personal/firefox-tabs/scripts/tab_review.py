@@ -451,7 +451,7 @@ def main():
         elif name == "plan":
             p.add_argument("decisions")
             p.add_argument("--allow-empty-groups", action="store_true")
-        else:
+        elif name == "shelve":
             p.add_argument("decisions")
             p.add_argument("--apply", action="store_true", help="append to project notes; only after the user confirms")
     args = ap.parse_args()
