@@ -80,3 +80,4 @@ Off the main flow entirely.
 ## Personal project continuation
 
 - `/advance-project` — Resume a project, consolidate parallel work, or close a delivery with current evidence and a usable handoff. It uses the project's existing layout and does not require the engineering-flow setup above. For isolated edits, handle the edit directly.
+- `/portfolio-brief` — Use Attune to report across existing allowlisted projects, with today’s useful result, actual decisions, natural-use feedback and parked work. Ask “用 Attune 汇报我的项目”; the executor returns the complete source-dated report.

@@ -1,11 +1,13 @@
 ---
 name: portfolio-brief
-description: Read-only overview of all the user's allowlisted projects as one local HTML page — workstream state in plain language, decisions that need the user grouped across projects, work that can move without them, and risk flags. Use when the user asks to look across all projects ("看下所有项目", "portfolio brief"); for one project use advance-project.
+description: Use Attune to report across the user's allowlisted projects when asked "用 Attune 汇报项目", "看下所有项目", or "portfolio brief". Deliver a complete source-dated report and local HTML, separating actual decisions, natural-use feedback and parked work. For one project's execution use advance-project.
 ---
 
 # Portfolio Brief
 
 Show the user, on one page, where every allowlisted project stands and what actually needs them. This skill reads and summarizes; it never changes a project, starts an agent, or dispatches work. The current agent performs the entire brief sequentially, without delegation. For resuming or advancing a single project, use `advance-project` in that project's existing conversation when requested; this skill does not invoke its execution workflow.
+
+The user-facing entry is **“用 Attune 汇报我的项目”**. The current executor handles the tools and source reading; the user does not prepare JSON, repeat project context, or run these commands. This is an on-demand report, not a recurring trial or scheduler.
 
 Run the scripts from this skill's directory: `python3 -I scripts/<name>.py`.
 
@@ -21,7 +23,7 @@ Read nothing outside these paths. If the file is missing, stop and ask the user 
 
 ## 1. Scan
 
-Run `python3 -I scripts/portfolio_scan.py > "$TMPDIR/portfolio-scan.json"`. It is read-only and records, for each project:
+Use a fresh local temp directory for this request and retain its `scan.json` and `brief.json`. Run `python3 -I scripts/portfolio_scan.py > "$RUN_DIR/scan.json"`. It is read-only and records, for each project:
 - the Git state: branch, last commit, uncommitted counts, ahead/behind;
 - the instruction files present;
 - the most recently changed status, plan and decision docs;
@@ -40,6 +42,8 @@ Per project, read only what the scan points to:
 
 Aim for about six reads per project, and follow a link only when a conclusion depends on it. Process projects sequentially with the current agent. If a source is unavailable, truncated, or outside the approved scope, record the gap rather than discovering more projects or reading session history.
 
+Do not stop at a document's opening summary. In each selected status source, inspect the dated headings and execution/approval gates (a targeted `rg -n` is enough to navigate), then read the relevant later passage. A newer dated paragraph may supersede an older header or pending list. Distinguish the fact date, file modification time, and this run's observation time. If current activity is not visible, keep that uncertainty; do not duplicate another executor's work.
+
 Apply `advance-project`'s evidence rules:
 - missing records mean unknown, not undone;
 - earlier completion claims are leads, not verification;
@@ -48,23 +52,28 @@ Apply `advance-project`'s evidence rules:
 
 ## 3. Write the brief JSON
 
-Write `$TMPDIR/portfolio-brief.json`:
+Write `$RUN_DIR/brief.json`:
 
 ```json
 {"projects": [{"alias": "P1",
+               "today": {"outcome": "One useful result", "mode": "feedback", "reason": "Why this is the right next step"},
                "workstreams": [{"name": "", "state": "", "next": "", "sources": []}], "unknowns": [""]}],
  "decisions": [{"project": "P1", "group": "", "question": "", "why_now": "", "if_wait": "",
                 "sources": [{"path": "docs/decisions.md", "line": 12,
                              "source_date": null, "observed_at": "2026-10-17T12:00:00+00:00"}]}],
+ "feedback": [{"project": "P1", "question": "What to observe", "when": "At the next natural use, without a separate task", "sources": []}],
+ "parked": [{"project": "P1", "item": "Old optional scope", "default": "Keep parked unless the user wants to resume", "sources": []}],
  "advisory": [{"project": "", "work": "", "why_no_human": ""}],
  "risks": [{"project": "", "kind": "", "detail": ""}]}
 ```
 
 Rules:
 - Include every scan alias exactly once. Do not copy Git counts, commit facts, domain, or observation time into project entries: the renderer joins them directly from the scan and rejects copied fact fields. Do not restate those numbers in narrative text.
+- Give each project one useful `today` outcome and the evidence-based mode: `proceed` (within existing authorization), `feedback` (needs real use), or `paused` (do not start new work here). This is prioritization, not dispatch. If today's actual goal cannot be established, say so rather than inventing a deliverable.
 - Each decision needs a real project-relative source file and line, the source's stated date (`null` if unknown), and the actual timezone-qualified observation time. Do not substitute file modification time for a decision date. Workstream source links use the same shape. The renderer checks provenance structure and file boundaries, not the truth of the agent's interpretation; compare each decision with its cited passage before delivery.
 - **Plain language.** Write in the user's language. Name a workstream by what it does; if the project uses a code name, add a few words saying what it means. No unexplained jargon or internal IDs.
-- **Decisions are only things the user must decide or accept.** Merge equivalent ones and give them a shared `group` (for example, several "accept on device" items). Every decision says why it matters now and what happens if it waits. Do not invent urgency.
+- **Decisions** are choices that block a specific next action: an execution authorization, material scope change or trade-off. Say what action waits and what happens meanwhile. Completed or superseded approvals are excluded; do not invent urgency.
+- Put ordinary real-use/device feedback in **`feedback`**, with its natural occasion. Put old options with a safe inactive default in **`parked`**. Both need the same source format as decisions. They do not increase the decision count. The renderer validates structure, not these semantic judgments; the executor still checks each classification against its passage.
 - **Advisory work** must be startable within authorization the user has already given, with a stated reason it does not need them. It is a suggestion: never start it.
 - **Risks** worth flagging:
   - work uncommitted for a long time;
@@ -76,11 +85,10 @@ Rules:
 
 ## 4. Render and hand off
 
-Run `python3 -I scripts/render_brief.py "$TMPDIR/portfolio-brief.json" "$TMPDIR/portfolio-scan.json"`. It validates alias coverage, scan-derived facts, and dated decision sources before writing; Git failures and Backlog truncation also appear in the HTML. It prints the HTML path, under the system temp directory. A validation error must be corrected before delivery, not bypassed by hand-editing the HTML.
+Run `python3 -I scripts/render_brief.py "$RUN_DIR/brief.json" "$RUN_DIR/scan.json"`. One command validates the input and produces matching HTML and a complete Markdown report under the system temp directory. It prints the HTML path; the `.md` file has the same stem. This local report is the result record, not another writable project-state store. Git failures and Backlog truncation appear in both formats. Correct validation errors before delivery, without hand-editing the HTML.
 
-Reply with the path and at most five lines:
-- how many decisions need the user;
-- the most important one;
-- anything flagged as a risk.
+Use that report to give the user a complete useful answer: the actual decision(s), each project's current result and next step with fact dates, safe suggestions, and important unknowns. Natural-use feedback and parked options remain separate. Include the artifact links as supporting material; counts and a temporary HTML link alone do not satisfy the request. Preserve source dates and limitations if shortening the generated text.
+
+Writing a sanitized observation into Attune's development log is separate from the read-only portfolio operation and follows the user's existing authorization. Do not reopen a trial, mark benefit established, or start recurring work merely because a report ran successfully.
 
 Do not act on anything in the brief unless the user asks.

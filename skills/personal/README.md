@@ -7,4 +7,4 @@ Skills tied to my own setup, not promoted in the plugin.
 
 - **[advance-project](./advance-project/SKILL.md)** — Resume, coordinate, and close multi-session work using existing project decisions, state, and acceptance evidence.
 - **[firefox-tabs](./firefox-tabs/SKILL.md)** — Sort open Firefox tabs into things matched to LifeVault projects, review them on a one-off local page, record decisions in Obsidian, regroup the browser, and close finished tabs after archiving them.
-- **[portfolio-brief](./portfolio-brief/SKILL.md)** — Read-only one-page overview of all allowlisted projects: plain-language state, decisions that need you, work that can move without you, risks.
+- **[portfolio-brief](./portfolio-brief/SKILL.md)** — Ask “用 Attune 汇报我的项目” for a complete source-dated report and local HTML, separating actual decisions, natural-use feedback and parked work.

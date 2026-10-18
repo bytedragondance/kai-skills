@@ -140,6 +140,43 @@ class RenderTests(unittest.TestCase):
         result = render.prepare_brief(self.brief, self.scan)
         self.assertEqual([p["alias"] for p in result["projects"]], ["P2", "P1"])
 
+    def test_feedback_and_parked_are_separate_from_decisions_in_both_outputs(self):
+        self.brief['projects'][0]['today'] = {'outcome': 'Use existing dashboard', 'mode': 'feedback', 'reason': 'Installed; real use remains unknown'}
+        self.brief['feedback'] = [{'project': 'P1', 'question': 'Observe charging at next use', 'when': 'Natural use only', 'sources': [self.source]}]
+        self.brief['parked'] = [{'project': 'P1', 'item': 'Optional inventory', 'default': 'Keep inactive', 'sources': [self.source]}]
+        prepared = render.prepare_brief(self.brief, self.scan)
+        page, report = render.render_page(prepared), render.render_markdown(prepared)
+        self.assertEqual(len(prepared['decisions']), 1)
+        self.assertIn('1 条待决定事项 · 1 条自然使用反馈 · 1 条默认停放事项', page)
+        decision_text = report.split('## 需要你决定', 1)[1].split('## 自然使用反馈', 1)[0]
+        self.assertNotIn('Observe charging', decision_text)
+        self.assertNotIn('Optional inventory', decision_text)
+        self.assertIn('Observe charging', report)
+        self.assertIn('Optional inventory', report)
+        self.assertIn('Use existing dashboard', page)
+        self.assertIn('Use existing dashboard', report)
+        self.assertIn('已跟踪改动 59', report)
+        self.assertIn('4000 / 4001', report)
+        self.assertIn('事实/来源日期 未知', report)
+        self.assertNotIn('<script>', report)
+
+    def test_feedback_and_parked_need_in_scope_provenance_and_descriptions(self):
+        for section, item in [('feedback', {'question': 'Observe', 'when': 'Next use'}),
+                              ('parked', {'item': 'Option', 'default': 'Inactive'})]:
+            for change in [{'sources': []}, {'project': 'P2'}, {next(iter(item)): ''}]:
+                brief = copy.deepcopy(self.brief)
+                brief[section] = [{'project': 'P1', 'sources': [self.source], **item, **change}]
+                with self.subTest(section=section, change=change), self.assertRaises(ValueError):
+                    render.prepare_brief(brief, self.scan)
+
+    def test_today_result_requires_a_real_mode_and_reason(self):
+        for today in [{'outcome': 'Result', 'mode': 'done', 'reason': 'Claim'},
+                      {'outcome': '', 'mode': 'proceed', 'reason': 'Ready'},
+                      {'outcome': 'Result', 'mode': 'paused', 'reason': ''}]:
+            self.brief['projects'][0]['today'] = today
+            with self.subTest(today=today), self.assertRaises(ValueError):
+                render.prepare_brief(self.brief, self.scan)
+
     def test_decision_without_source_or_outside_project_is_rejected(self):
         for updates in [{"sources": []}, {"project": "P2"}]:
             brief = copy.deepcopy(self.brief)
@@ -178,7 +215,12 @@ class RenderTests(unittest.TestCase):
         brief_path.write_text(json.dumps(self.brief))
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(Path(result.stdout.strip()).is_file())
+        html_path = Path(result.stdout.strip())
+        self.assertTrue(html_path.is_file())
+        text_path = html_path.with_suffix('.md')
+        self.assertTrue(text_path.is_file())
+        self.assertIn('Attune 项目汇报', text_path.read_text())
+        self.assertIn(WHEN, text_path.read_text())
 
 
 if __name__ == "__main__":
