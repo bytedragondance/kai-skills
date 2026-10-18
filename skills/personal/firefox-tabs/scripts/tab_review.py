@@ -6,14 +6,18 @@ Usage:
   python3 -I scripts/tab_review.py context [--vault V] --out CONTEXT.json
   python3 -I scripts/tab_review.py review PROPOSAL.json --out DECISIONS.json [--vault V] [--no-open]
   python3 -I scripts/tab_review.py plan DECISIONS.json --out PLAN.json [--allow-empty-groups]
+  python3 -I scripts/tab_review.py shelve DECISIONS.json [--vault V] [--apply]
 
 context  reads the browser and the vault's 20_Projects notes; the agent proposes things from it.
 review   serves the review page on 127.0.0.1 and waits. When the user submits, it writes
          DECISIONS.json and the record note 00_Inbox/标签整理 <date>.md, then exits.
 plan     resolves the decisions against a fresh snapshot (by URL, since tab IDs change across
          browser restarts) and writes a plan for tab_apply.py.
+shelve   prints the 续点 (resume point) of every 搁置 thing; with --apply, after the user confirms,
+         appends it to the thing's project note.
 
-Only review writes to the vault, and only the record note. Nothing here changes the browser.
+review writes only the record note; shelve --apply only appends 续点 sections to project notes.
+Nothing here changes the browser.
 """
 
 import argparse
@@ -36,11 +40,13 @@ DEFAULT_VAULT = os.path.expanduser(
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "review.html")
 INTENTS = ("调研", "事务", "追踪", "参考", "常驻", "残骸", "消遣", "重复")
 # 事情 end; 主题 are long-lived topic collections; 清理 are pages with nothing worth keeping.
-DECISIONS = {"事情": ("进行中", "做完", "放弃", "待定"), "主题": ("保留", "待定"), "清理": ("关掉", "待定")}
+# 搁置: paused, may come back. Its 续点 goes to the project note and its tabs are archived and closed.
+DECISIONS = {"事情": ("进行中", "做完", "搁置", "放弃", "待定"), "主题": ("保留", "待定"), "清理": ("关掉", "待定")}
 CONFIDENCE = ("高", "中", "低")
-FATES = (None, "关", "不动")  # per-tab override of the thing's decision
+FATES = (None, "关", "不动", "续点")  # per-tab override; 续点 (keep the link in the 续点) is for 搁置 only
 DONE_GROUP = "做完"
 DUP_GROUP = "重复"
+SHELF_GROUP = "搁置"
 TRACK_COLOR = {"生活": "green", "AI": "blue", "战略": "purple"}
 UNSORTED = "未归类"
 REVIEW_HOURS = 6
@@ -112,6 +118,8 @@ def destination(thing, tab):
         return DONE_GROUP
     if thing["kind"] == "清理":
         return DUP_GROUP if thing["intent"] == "重复" else DONE_GROUP
+    if decision == "搁置":
+        return SHELF_GROUP
     if decision in ("进行中", "保留"):
         return thing["title"]
     return DONE_GROUP
@@ -160,10 +168,14 @@ def check_things(things, projects, tabs=None):
                             % (title, thing["kind"], "/".join(DECISIONS[thing["kind"]])))
         if thing.get("confidence") not in CONFIDENCE:
             problems.append("thing %r: confidence must be one of %s" % (title, "/".join(CONFIDENCE)))
+        if not isinstance(thing.get("resume", ""), str):
+            problems.append("thing %r: resume must be text" % title)
         for entry in thing["tabs"]:
             tid = entry["id"]
             if entry.get("fate") not in FATES:
-                problems.append("tab %s: fate must be 关, 不动, or absent" % tid)
+                problems.append("tab %s: fate must be 关, 不动, 续点, or absent" % tid)
+            elif entry.get("fate") == "续点" and thing.get("decision") != "搁置":
+                problems.append("tab %s: fate 续点 only fits a 搁置 thing" % tid)
             if tabs is not None and tid not in tabs:
                 problems.append("tab %s is not open" % tid)
             elif tabs is not None and not groupable(tabs[tid]):
@@ -179,7 +191,7 @@ def record_note(vault, date, things, taken):
     total = sum(len(t["tabs"]) for t in things)
     lines = ["---", "type: tab-review", "created: %s" % date, "status: decided", "---", "",
              "# 标签整理 %s" % date, "",
-             "快照 %s，%d 个标签，%d 项。`决定` 是你在审查页里定的；标了「关」或「不动」的标签不跟着决定走。"
+             "快照 %s，%d 个标签，%d 项。`决定` 是你在审查页里定的；标了「关」或「不动」的标签不跟着决定走；搁置的事带着续点，「续点」标签的链接写在续点里。"
              % (taken, total, len(things)), ""]
     for kind in DECISIONS:
         group = [t for t in things if t["kind"] == kind]
@@ -201,10 +213,26 @@ def record_note(vault, date, things, taken):
                 fate = (" · **%s**" % tab["fate"]) if tab.get("fate") else ""
                 lines.append("- [%s](<%s>) · %s天%s" % (title, tab["url"], tab.get("age", "?"), fate))
             lines.append("")
+            if thing["decision"] == "搁置":
+                lines += resume_lines(thing, date)
     path = os.path.join(vault, "00_Inbox", "标签整理 %s.md" % date)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     return path
+
+
+def resume_lines(thing, date):
+    """The 续点 section for a 搁置 thing: the user's resume text plus the links marked 续点."""
+    lines = ["#### 续点（%s 搁置）" % date, ""]
+    text = (thing.get("resume") or "").strip()
+    lines += text.splitlines() if text else ["- （没写续点）"]
+    links = [t for t in thing["tabs"] if t.get("fate") == "续点"]
+    if links:
+        lines += ["", "下次从这些开始："]
+        for tab in links:
+            title = (tab["title"] or tab["url"]).replace("[", "［").replace("]", "］").replace("\n", " ")
+            lines.append("- [%s](<%s>)" % (title, tab["url"]))
+    return lines + [""]
 
 
 def cmd_review(args):
@@ -230,6 +258,7 @@ def cmd_review(args):
         thing["tabs"] = [{"id": e["id"], "title": tabs[e["id"]]["title"], "url": tabs[e["id"]]["url"],
                           "age": age_days(tabs[e["id"]]), "group": group_title.get(tabs[e["id"]]["groupId"]),
                           "why": e.get("why", ""), "fate": e.get("fate")} for e in thing["tabs"]]
+        thing["resume"] = thing.get("resume", "")
 
     token = secrets.token_urlsafe(16)
     date = datetime.date.today().isoformat()
@@ -342,7 +371,7 @@ def cmd_plan(args):
                 continue
             if group_title.get(t["groupId"]) == target:
                 continue
-            tcolor = {DONE_GROUP: "red", DUP_GROUP: "grey"}.get(target, color)
+            tcolor = {DONE_GROUP: "red", DUP_GROUP: "grey", SHELF_GROUP: "yellow"}.get(target, color)
             targets.setdefault(target, (tcolor, []))[1].append(tid)
 
     plan = {"group_add": [], "group_create": [], "allow_groups_at_risk": args.allow_empty_groups}
@@ -374,21 +403,59 @@ def cmd_plan(args):
     return 0
 
 
+def cmd_shelve(args):
+    with open(args.decisions, encoding="utf-8") as f:
+        decisions = json.load(f)
+    date = decisions.get("taken") or datetime.date.today().isoformat()
+    shelved = [t for t in decisions["things"] if t["decision"] == "搁置"]
+    if not shelved:
+        print("no 搁置 things")
+        return 0
+    written = []
+    for thing in shelved:
+        # In a project note the 续点 is a level-2 section; the record note nests it under the thing.
+        heading, *body = resume_lines(thing, date)
+        section = ["## " + heading.lstrip("# ")] + body
+        path = os.path.join(args.vault, "20_Projects", (thing.get("project") or "") + ".md")
+        where = os.path.relpath(path, args.vault) if thing.get("project") and os.path.exists(path) else None
+        print("=== %s -> %s" % (thing["title"], where or "no project note; the 续点 stays in the record note only"))
+        print("\n".join(section))
+        if not (args.apply and where):
+            continue
+        with open(path, encoding="utf-8") as f:
+            current = f.read()
+        if section[0] in current:
+            print("(already in %s; skipped)" % where)
+            continue
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(("" if current.endswith("\n") else "\n") + "\n" + "\n".join(section))
+        written.append(where)
+    if args.apply:
+        print("appended to: %s" % (", ".join(written) or "nothing"))
+    else:
+        print("preview only: nothing written; rerun with --apply once the user confirms")
+    return 0
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Firefox tabs grouped by thing: context, review, plan.")
+    ap = argparse.ArgumentParser(description="Firefox tabs grouped by thing: context, review, plan, shelve.")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("context", "review", "plan"):
+    for name in ("context", "review", "plan", "shelve"):
         p = sub.add_parser(name)
         p.add_argument("--vault", default=os.environ.get("FIREFOX_TABS_VAULT", DEFAULT_VAULT))
-        p.add_argument("--out", required=True)
+        if name != "shelve":
+            p.add_argument("--out", required=True)
         if name == "review":
             p.add_argument("proposal")
             p.add_argument("--no-open", action="store_true", help="print the URL without opening it")
         elif name == "plan":
             p.add_argument("decisions")
             p.add_argument("--allow-empty-groups", action="store_true")
+        else:
+            p.add_argument("decisions")
+            p.add_argument("--apply", action="store_true", help="append to project notes; only after the user confirms")
     args = ap.parse_args()
-    return {"context": cmd_context, "review": cmd_review, "plan": cmd_plan}[args.cmd](args) or 0
+    return {"context": cmd_context, "review": cmd_review, "plan": cmd_plan, "shelve": cmd_shelve}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

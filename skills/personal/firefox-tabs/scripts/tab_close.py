@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Close the 做完 and 重复 tabs from a review, archiving each one to LifeVault first.
+"""Close the 做完, 搁置, and 重复 tabs from a review, archiving each one to LifeVault first.
 
 Usage: python3 -I scripts/tab_close.py DECISIONS.json [--vault V] [--yes]
 
-Resolves every tab the decisions send to 做完 or 重复 against a fresh snapshot, by URL, and
+Resolves every tab the decisions send to 做完, 搁置, or 重复 against a fresh snapshot, by URL, and
 keeps only those still sitting in that group: a tab the user dragged out has changed its
 mind. Each thing becomes one `firefox-agent tab close` call with its own reason, and every
 call is dry-run first. Without --yes it stops there and closes nothing. With --yes (only
@@ -24,7 +24,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tab_apply import call  # noqa: E402
 from tab_audit import firefox_agent  # noqa: E402
-from tab_review import DEFAULT_VAULT, DONE_GROUP, DUP_GROUP, destination, left_alone_reason  # noqa: E402
+from tab_review import (DEFAULT_VAULT, DONE_GROUP, DUP_GROUP, SHELF_GROUP, destination,  # noqa: E402
+                        left_alone_reason, resume_lines)
+
+CLOSING = (DONE_GROUP, SHELF_GROUP, DUP_GROUP)
 
 ARCHIVE_DIR = os.path.join("60_Archive", "标签存档")
 
@@ -46,7 +49,7 @@ def batches_from(decisions, snap):
     for thing in decisions["things"]:
         for item in thing["tabs"]:
             target = destination(thing, item)
-            if target not in (DONE_GROUP, DUP_GROUP):
+            if target not in CLOSING:
                 continue
             # Same resolution as `tab_review.py plan`: IDs change across restarts, URLs don't.
             tid = item["id"]
@@ -74,7 +77,7 @@ def batches_from(decisions, snap):
 
     closing = {tid for ids in batches.values() for tid in ids}
     for gid, title in group_title.items():
-        if title not in (DONE_GROUP, DUP_GROUP):
+        if title not in CLOSING:
             continue
         extra = [t for t in snap["tabs"] if t["groupId"] == gid and t["id"] not in closing]
         if extra:
@@ -86,12 +89,28 @@ def batches_from(decisions, snap):
     return list(batches.items()), notes
 
 
+def unshelved(decisions, vault):
+    """搁置 things whose 续点 is not in their project note yet (`tab_review.py shelve --apply`)."""
+    date = decisions.get("taken") or "?"
+    missing = []
+    for thing in decisions["things"]:
+        if thing["decision"] != "搁置":
+            continue
+        path = os.path.join(vault, "20_Projects", (thing.get("project") or "") + ".md")
+        heading = "## " + resume_lines(thing, date)[0].lstrip("# ")
+        if not thing.get("project") or not os.path.exists(path):
+            missing.append("%s (no project note; the 续点 is only in the record note)" % thing["title"])
+        elif heading not in open(path, encoding="utf-8").read():
+            missing.append("%s (run tab_review.py shelve --apply first, or the user skips it)" % thing["title"])
+    return missing
+
+
 def close_args(ids, archive, reason):
     return ["tab", "close"] + [str(t) for t in ids] + ["--archive", archive, "--reason", reason]
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Archive to LifeVault, then close the 做完/重复 tabs.")
+    ap = argparse.ArgumentParser(description="Archive to LifeVault, then close the 做完/搁置/重复 tabs.")
     ap.add_argument("decisions", help="the review's DECISIONS.json")
     ap.add_argument("--vault", default=os.environ.get("FIREFOX_TABS_VAULT", DEFAULT_VAULT))
     ap.add_argument("--yes", action="store_true", help="close for real; only after the user approves")
@@ -108,7 +127,7 @@ def main():
         return 1
     batches, notes = batches_from(decisions, before)
     if not batches:
-        print("refused, nothing closed: no 做完 or 重复 tab is open")
+        print("refused, nothing closed: no 做完, 搁置, or 重复 tab is open")
         for n in notes:
             print("note: " + n)
         return 1
@@ -131,6 +150,8 @@ def main():
     print("archive: %s" % archive)
     for n in notes:
         print("note: " + n)
+    for n in unshelved(decisions, args.vault):
+        print("续点 not in a project note: " + n)
     if not args.yes:
         print("dry run only: nothing archived or closed; rerun with --yes once the user approves")
         return 0

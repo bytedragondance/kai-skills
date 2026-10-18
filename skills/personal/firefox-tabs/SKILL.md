@@ -26,7 +26,8 @@ Read the project notes that tabs seem to belong to. Their timelines often settle
 
 Sort every tab into one of three kinds, and give each one a candidate decision. Don't leave decisions blank for the user to fill in: the user should only have to look at what you're unsure of.
 
-- **事情** (thing): a one-off that will end, such as a booking, a purchase, a claim, or a research question. Decisions: 进行中 / 做完 / 放弃 / 待定. A 进行中 thing becomes its own Firefox group, named after the thing, so give it a short title. Don't make a thing out of one tab; fold it into a topic.
+- **事情** (thing): a one-off that will end, such as a booking, a purchase, a claim, or a research question. Decisions: 进行中 / 做完 / 搁置 / 放弃 / 待定. A 进行中 thing becomes its own Firefox group, named after the thing, so give it a short title. Don't make a thing out of one tab; fold it into a topic.
+- **搁置** (paused) is for a thing that was half done, has gone quiet, and may be picked up later, such as a router flash researched halfway. Its tabs are archived and closed, and what is worth keeping moves into a **续点** (resume point) in the project note. For each 搁置 candidate, draft `resume` from the tabs and the project note: 做到 (how far it got), 卡在 (where it stopped), 下次从 (where to start next). Mark the 2–3 tabs worth reopening with `"fate": "续点"`. Suggest 搁置 rather than 进行中 for a thing whose tabs are all weeks old and whose project note has no recent entries.
 - **主题** (topic): a long-lived, scattered collection, such as forum threads, tool links, or local outings. Decisions: 保留 / 待定. A kept topic becomes a group; reuse an existing Firefox group's name so its tabs stay put. Inside a topic, mark tabs to close one by one (`"fate": "关"`, with `why`), for example ones untouched for a long time, expired deals, or bare home and login pages.
 - **清理** (cleanup): pages with nothing to keep, such as logins, thank-you pages, expired pages, entertainment, and duplicates. Decisions: 关掉 / 待定. Exact duplicates get their own 清理 item with intent 重复; never mix them with judgment calls.
 
@@ -35,13 +36,17 @@ Write `<proposal.json>`:
 ```json
 {"things": [{"kind": "事情", "title": "台北住宿（已订）", "project": "2026 冬季回国计划", "intent": "事务",
              "decision": "做完", "confidence": "高", "note": "项目笔记：住宿已订",
-             "tabs": [{"id": 100}, {"id": 213, "fate": "不动", "why": "售后可能没处理完"}]}]}
+             "tabs": [{"id": 100}, {"id": 213, "fate": "不动", "why": "售后可能没处理完"}]},
+            {"kind": "事情", "title": "OpenWrt MX4300", "project": "OpenWrt MX4300", "intent": "调研",
+             "decision": "搁置", "confidence": "中", "note": "标签都是三周前的，笔记十月后没更新",
+             "resume": "- 做到：确认能刷，选了某某固件\n- 卡在：分区备份没做\n- 下次从：先备份 mtd",
+             "tabs": [{"id": 140, "fate": "续点"}, {"id": 141}]}]}
 ```
 
 - `project` must be an exact note name in `20_Projects/`. Match tabs to projects first, and read those notes: their timelines often settle whether a thing has ended, for example "已订" or "已提交". Never invent an outcome the notes and tabs don't show.
 - `intent` is one of 调研, 事务, 追踪, 参考, 常驻, 残骸, 消遣, 重复.
 - `confidence` is 高, 中, or 低. Anything below 高 lands on the page's "需要你看" view. Use 高 only when the project notes or the tabs themselves back the decision. Even at 低, still give your best-guess decision, and say in `note` what would change it.
-- `fate` on a tab overrides its thing: 关 sends that tab to 做完, and 不动 leaves it where it is.
+- `fate` on a tab overrides its thing: 关 sends that tab to 做完, and 不动 leaves it where it is. 续点 fits only a 搁置 thing: the tab is still archived and closed, and its link is written into the 续点.
 - Signals: tabs opened together (similar `age_days`), `utm_source=chatgpt.com` (left over from a research chat), and URL shape (login, checkout, confirmation, releases, a forum page number).
 - Leave out every tab with a `left_alone` reason in the context: pinned tabs, stashed tabs, private-window tabs, container tabs, and the review page itself. The scripts refuse them anyway.
 
@@ -49,7 +54,7 @@ Write `<proposal.json>`:
 
 Run `scripts/tab_review.py review <proposal.json> --out <decisions.json>` in the background. It refuses bad kinds, decisions, confidence values, or projects, and any tab listed twice. Tabs the proposal misses go to `未归类`. It then serves `scripts/review.html` on `127.0.0.1`, behind a random token, opens the page, and waits up to 6 hours. Pass `--no-open` to print the URL without opening it. Tell the user the page is open.
 
-The page opens on "需要你看", which holds only the items below 高 confidence, least sure first. The user accepts a suggestion with "✓ 就这样" (Enter), or changes the decision (keys `1`–`4`) or single tabs (跟着走 / 关 / 不动). They can also move tabs between items, rename items, or browse the 事情 / 主题 / 清理 views. Submitting writes `<decisions.json>` and the record note `00_Inbox/标签整理 <date>.md`, and then the server exits. Commit only that note in the vault, following the vault's AGENTS.md.
+The page opens on "需要你看", which holds only the items below 高 confidence, least sure first. The user accepts a suggestion with "✓ 就这样" (Enter), or changes the decision (keys `1`–`5`) or single tabs (跟着走 / 关 / 不动; in a 搁置 item 存档关 / 续点 / 不动). A 搁置 item shows its 续点 text for the user to edit. They can also move tabs between items, rename items, or browse the 事情 / 主题 / 清理 views. Submitting writes `<decisions.json>` and the record note `00_Inbox/标签整理 <date>.md`, which also holds each 续点, and then the server exits. Commit only that note in the vault, following the vault's AGENTS.md.
 
 ## 5. Plan and apply
 
@@ -57,6 +62,7 @@ Run `scripts/tab_review.py plan <decisions.json> --out <plan.json>`. It resolves
 
 - 进行中 thing, or 保留 topic → a group with that title (it adds to the group if one already has that name)
 - 做完 / 放弃 / 关掉, or a tab marked 关 → the `做完` group, to close in step 6
+- 搁置 → the `搁置` group, to close in step 6 after its 续点 is saved
 - a 清理 item with intent 重复 → the `重复` group
 - 待定, or a tab marked 不动 → left where it is
 
@@ -66,7 +72,9 @@ Do not change project notes, project status, or reminders in this skill. The vau
 
 ## 6. Close
 
-Run `scripts/tab_close.py <decisions.json>`. It takes a fresh snapshot and resolves every tab the decisions send to `做完` or `重复`, by URL like `plan`, keeping only tabs that still sit in that group: a tab the user dragged out has changed its mind. It dry-runs one `firefox-agent tab close` per thing, with the reason `标签整理 <date> · <thing> · <decision>`, then prints the counts per group, the archive path, and notes: tabs left open, tabs already closed, and child tabs (`openerTabId`) of closing tabs that stay open. It closes nothing.
+If anything was 搁置, first run `scripts/tab_review.py shelve <decisions.json>`. It prints each 续点 and the project note it goes into. Show this to the user. Only after they confirm, run it again with `--apply`, which appends a `## 续点（<date> 搁置）` section to the end of each project note and skips notes that already have it. Commit those notes in the vault. A 搁置 thing without a project keeps its 续点 only in the record note; say so. Changing the project's `status:` is the user's call: suggest it, but don't change it.
+
+Then run `scripts/tab_close.py <decisions.json>`. It takes a fresh snapshot and resolves every tab the decisions send to `做完`, `搁置`, or `重复`, by URL like `plan`, keeping only tabs that still sit in that group: a tab the user dragged out has changed its mind. It dry-runs one `firefox-agent tab close` per thing, with the reason `标签整理 <date> · <thing> · <decision>`, then prints the counts per group, the archive path, and notes: tabs left open, tabs already closed, and child tabs (`openerTabId`) of closing tabs that stay open. It also lists 搁置 things whose 续点 is not in a project note yet. It closes nothing.
 
 Show the printout to the user and ask whether to close. Only on a clear yes in this session, run it again with `--yes`. firefox-agent appends one JSON line per tab (URL with account-key-like query parameters such as `account_key` stripped, title, group, window, container, last access, closing time, reason) to `60_Archive/标签存档/<YYYY-MM>.jsonl` in the vault and fsyncs it before closing; if the write fails, nothing closes. Done when it prints `post-check OK`. Commit only that month's archive file in the vault.
 
@@ -76,7 +84,8 @@ If the dry run fails with `EXTENSION_RELOAD_REQUIRED`, the running extension pre
 
 Tell the user:
 
-- how many tabs were closed and where they are archived, or that the `做完` and `重复` groups are still waiting for their go-ahead;
+- how many tabs were closed and where they are archived, or that the `做完`, `搁置`, and `重复` groups are still waiting for their go-ahead;
+- which things were 搁置 and which project notes now hold their 续点;
 - which things and topics are now their own groups;
 - what was left alone (待定, tabs marked 不动, pinned, stashed, container, private) and why.
 

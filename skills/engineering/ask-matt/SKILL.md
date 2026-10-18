@@ -75,7 +75,7 @@ Off the main flow entirely.
 
 ## Personal browser setup
 
-- `/firefox-tabs` — Sort open Firefox tabs into things, topics, and cleanup with `firefox-agent`, review them on a local page, record the decisions in LifeVault, and regroup the browser. Finished (`做完`) and duplicate (`重复`) tabs are archived to the vault and closed only after you approve.
+- `/firefox-tabs` — Sort open Firefox tabs into things, topics, and cleanup with `firefox-agent`, review them on a local page, record the decisions in LifeVault, and regroup the browser. Paused (`搁置`) things keep a 续点 (resume point) in their project note. Finished, paused, and duplicate tabs are archived to the vault and closed only after you approve.
 
 ## Personal project continuation
 

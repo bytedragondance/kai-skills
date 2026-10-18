@@ -10,7 +10,7 @@
   --soft: #efede8; --accent: #2f5bd3;
   --go: #2f7d4f; --go-bg: #e3f1e8; --done: #b4442f; --done-bg: #f7e4df;
   --drop: #8a5a00; --drop-bg: #f6ebd3; --wait: #5d5c58; --wait-bg: #ebe9e4;
-  --stay: #6c3fb5; --stay-bg: #eee6fa;
+  --stay: #6c3fb5; --stay-bg: #eee6fa; --shelf: #2a6f86; --shelf-bg: #dceef3;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
 }
 @media (prefers-color-scheme: dark) {
@@ -19,7 +19,7 @@
     --soft: #2a2927; --accent: #7d9dff;
     --go: #7ccf9c; --go-bg: #1f3428; --done: #f08f7a; --done-bg: #3b231e;
     --drop: #e6b65c; --drop-bg: #362c18; --wait: #b5b3ad; --wait-bg: #2c2b29;
-    --stay: #bb9cf0; --stay-bg: #2e2440;
+    --stay: #bb9cf0; --stay-bg: #2e2440; --shelf: #7cc6de; --shelf-bg: #1b3139;
     --shadow: none;
   }
 }
@@ -90,6 +90,12 @@ a.badge:hover { color: var(--accent); }
 .seg button[aria-pressed="true"].done { background: var(--done-bg); color: var(--done); font-weight: 600; }
 .seg button[aria-pressed="true"].drop { background: var(--drop-bg); color: var(--drop); font-weight: 600; }
 .seg button[aria-pressed="true"].wait { background: var(--wait-bg); color: var(--wait); font-weight: 600; }
+.seg button[aria-pressed="true"].shelf { background: var(--shelf-bg); color: var(--shelf); font-weight: 600; }
+.resume { grid-column: 1 / -1; display: grid; gap: 4px; }
+.resume label { font-size: 12px; color: var(--shelf); font-weight: 600; }
+.resume textarea { width: 100%; min-height: 4.6em; resize: vertical; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.resume textarea:focus { outline: 2px solid var(--shelf); outline-offset: 0; }
 .ok { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 11px; cursor: pointer;
   font-size: 13px; color: var(--muted); white-space: nowrap; }
 .ok:hover { border-color: var(--go); color: var(--go); }
@@ -102,6 +108,7 @@ a.badge:hover { color: var(--accent); }
 .tab:hover { background: var(--bg); }
 .tab.f-关 .t { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
 .tab.f-不动 .t { color: var(--stay); }
+.tab.f-续点 .t { color: var(--shelf); font-weight: 600; }
 .fav { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font-size: 11px;
   font-weight: 700; color: #fff; }
 .tinfo { min-width: 0; }
@@ -117,6 +124,7 @@ a.badge:hover { color: var(--accent); }
 .mini button[aria-pressed="true"].f0 { background: var(--soft); color: var(--ink); font-weight: 600; }
 .mini button[aria-pressed="true"].f1 { background: var(--done-bg); color: var(--done); font-weight: 600; }
 .mini button[aria-pressed="true"].f2 { background: var(--stay-bg); color: var(--stay); font-weight: 600; }
+.mini button[aria-pressed="true"].f3 { background: var(--shelf-bg); color: var(--shelf); font-weight: 600; }
 .move { font-size: 12px; max-width: 7.5em; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
 .hidden { display: none !important; }
 
@@ -177,13 +185,15 @@ const OPTS = DATA.decisions;              // kind -> decision options
 const INTENTS = DATA.intents;
 const KINDS = ["事情", "主题", "清理"];
 const KIND_HINT = {
-  "事情": "会结束的事：做完就整组关掉。进行中的会各自成为一个 Firefox 组。",
+  "事情": "会结束的事：做完就整组关掉。进行中的会各自成为一个 Firefox 组。做了一半、以后可能捡起来的选「搁置」：写下续点，标签存档后关掉。",
   "主题": "长期、零散的收藏，按主题收进一个组。AI 已经把太久没看的标成「关」。",
   "清理": "登录页、过期页、消遣和重复页，没有要留的内容。默认整组关掉。",
 };
 const DEFAULT_LABEL = { "事情": "跟着走", "主题": "留", "清理": "关" };
-const DEC_CLASS = { "进行中": "go", "保留": "go", "做完": "done", "关掉": "done", "放弃": "drop", "待定": "wait" };
-const COLORS = { go: "var(--go)", done: "var(--done)", dup: "var(--drop)", stay: "var(--wait)" };
+const DEC_CLASS = { "进行中": "go", "保留": "go", "做完": "done", "关掉": "done", "搁置": "shelf", "放弃": "drop", "待定": "wait" };
+const COLORS = { go: "var(--go)", done: "var(--done)", shelf: "var(--shelf)", dup: "var(--drop)", stay: "var(--wait)" };
+const OUTCOMES = ["go", "done", "shelf", "dup", "stay"];
+const MAX_KEY = Math.max(...Object.values(OPTS).map(o => o.length));
 
 const things = DATA.things.map((t, i) => ({ ...t, key: i, seen: false }));
 const needsLook = t => t.confidence !== "高";
@@ -217,11 +227,12 @@ function outcome(t, tab) {
   if (tab.fate === "不动" || t.decision === "待定") return "stay";
   if (tab.fate === "关") return "done";
   if (t.kind === "清理") return t.intent === "重复" ? "dup" : "done";
+  if (t.decision === "搁置") return "shelf";
   return (t.decision === "进行中" || t.decision === "保留") ? "go" : "done";
 }
 
 function tally() {
-  const c = { go: 0, done: 0, dup: 0, stay: 0, groups: 0 };
+  const c = { go: 0, done: 0, shelf: 0, dup: 0, stay: 0, groups: 0 };
   for (const t of things) {
     let moving = 0;
     for (const tab of t.tabs) { const o = outcome(t, tab); c[o]++; if (o === "go") moving++; }
@@ -231,16 +242,16 @@ function tally() {
 }
 
 function renderHeader() {
-  const c = tally(), total = c.go + c.done + c.dup + c.stay;
+  const c = tally(), total = OUTCOMES.reduce((n, k) => n + c[k], 0);
   const left = things.filter(t => t.tabs.length && needsLook(t) && !t.seen).length;
   document.getElementById("sub").textContent =
     `${total} 个标签 · 快照 ${DATA.taken}` + (left ? ` · 还有 ${left} 件要你看` : " · 都看过了");
-  document.getElementById("meter").replaceChildren(...["go", "done", "dup", "stay"].map(k =>
+  document.getElementById("meter").replaceChildren(...OUTCOMES.map(k =>
     h("span", { style: `width:${total ? c[k] / total * 100 : 0}%;background:${COLORS[k]}` })));
   const item = (k, label, n) => h("span", {}, h("i", { class: "dot", style: `background:${COLORS[k]}` }), label, " ", h("b", {}, String(n)));
   document.getElementById("legend").replaceChildren(
     item("go", `进 ${c.groups} 个组`, c.go), item("done", "进「做完」组", c.done),
-    item("dup", "进「重复」组", c.dup), item("stay", "不动", c.stay));
+    item("shelf", "进「搁置」组", c.shelf), item("dup", "进「重复」组", c.dup), item("stay", "不动", c.stay));
 
   const count = v => v === "look" ? left : things.filter(t => t.kind === v && t.tabs.length).length;
   const tabs = [["look", "需要你看"], ...KINDS.map(k => [k, k])];
@@ -254,7 +265,7 @@ function renderHeader() {
       onclick: () => { view = v; focusKey = null; render(); window.scrollTo(0, 0); },
     }, label, h("span", { class: "n" }, String(count(v))))),
     h("div", { class: "navtools" }, searchBox,
-      h("span", { class: "keys" }, h("kbd", {}, "j"), h("kbd", {}, "k"), " 切换 · ", h("kbd", {}, "1"), "–", h("kbd", {}, "4"),
+      h("span", { class: "keys" }, h("kbd", {}, "j"), h("kbd", {}, "k"), " 切换 · ", h("kbd", {}, "1"), "–", h("kbd", {}, String(MAX_KEY)),
         " 决定 · ", h("kbd", {}, "↵"), " 就这样")));
 }
 
@@ -281,12 +292,21 @@ function moveTab(fromKey, tabId, target) {
   render();
 }
 
-function setDecision(t, d) { t.decision = d; t.seen = true; render(); }
+function setDecision(t, d) {
+  t.decision = d; t.seen = true;
+  // 续点 only means something for 搁置; leaving 搁置 sends those tabs back to the thing's decision.
+  if (d !== "搁置") for (const tab of t.tabs) if (tab.fate === "续点") tab.fate = null;
+  render();
+}
 
 function tabRow(t, tab, others) {
   const dom = domain(tab.url);
-  const fates = [[null, DEFAULT_LABEL[t.kind], "f0"], ["关", "关", "f1"], ["不动", "不动", "f2"]]
-    .filter(([f]) => !(t.kind === "清理" && f === "关"));
+  const fates = t.decision === "搁置"
+    ? [[null, "存档关", "f0"], ["续点", "续点", "f3"], ["不动", "不动", "f2"]]
+    : [[null, DEFAULT_LABEL[t.kind], "f0"], ["关", "关", "f1"], ["不动", "不动", "f2"]]
+      .filter(([f]) => !(t.kind === "清理" && f === "关"));
+  const tips = { "不动": "留在原处，不跟着这件事走", "关": "单独把这个标签放进「做完」组",
+    "续点": "把这个链接写进续点，下次从它开始（标签照样存档后关掉）" };
   return h("li", { class: "tab" + (tab.fate ? " f-" + tab.fate : "") },
     h("span", { class: "fav", style: `background:hsl(${hue(dom)} 45% 48%)` }, dom.slice(0, 1).toUpperCase()),
     h("span", { class: "tinfo" },
@@ -297,7 +317,7 @@ function tabRow(t, tab, others) {
     h("span", { class: "ops" },
       h("span", { class: "mini" }, fates.map(([f, label, cls]) => h("button", {
         class: cls, "aria-pressed": String((tab.fate || null) === f),
-        title: f === "不动" ? "留在原处，不跟着这件事走" : f === "关" ? "单独把这个标签放进「做完」组" : "按这件事的决定走",
+        title: tips[f] || "按这件事的决定走",
         onclick: () => { tab.fate = f; t.seen = true; render(); },
       }, label))),
       h("select", { class: "move", "aria-label": "移到别的地方", onchange: e => moveTab(t.key, tab.id, e.target.value) },
@@ -336,7 +356,11 @@ function card(t) {
       needsLook(t) ? h("span", { class: "badge conf-" + t.confidence }, "AI 把握" + t.confidence) : null,
       h("span", { class: "count" }, `${t.tabs.length} 个 · ${ageText}`)),
     h("div", { class: "right" }, seg, okBtn),
-    t.note ? h("div", { class: "note" }, t.note) : null);
+    t.note ? h("div", { class: "note" }, t.note) : null,
+    t.decision === "搁置" ? h("div", { class: "resume", onclick: stop },
+      h("label", { for: "resume-" + t.key }, "续点：会写进项目笔记，下次打开就知道从哪接着做"),
+      h("textarea", { id: "resume-" + t.key, placeholder: "- 做到：…\n- 卡在：…\n- 下次从：…",
+        oninput: e => { t.resume = e.target.value; t.seen = true; } }, t.resume || "")) : null);
 
   let body;
   if (open) {
@@ -428,6 +452,7 @@ document.getElementById("submit").addEventListener("click", () => {
     h("ul", {},
       h("li", {}, `${c.go} 个标签进 ${c.groups} 个组：${groups.join("、") || "无"}`),
       h("li", {}, `${c.done} 个进「做完」组，${c.dup} 个进「重复」组`),
+      c.shelf ? h("li", {}, `${c.shelf} 个进「搁置」组：续点写进项目笔记前会先问你，标签之后存档再关`) : null,
       h("li", {}, `${c.stay} 个不动`)));
   document.getElementById("err").textContent = "";
   dlg.showModal();
@@ -436,7 +461,7 @@ document.getElementById("cancel").addEventListener("click", () => dlg.close());
 document.getElementById("go").addEventListener("click", async () => {
   const payload = { things: things.filter(t => t.tabs.length).map(t => ({
     kind: t.kind, title: t.title, project: t.project || null, intent: t.intent, decision: t.decision,
-    confidence: t.confidence, note: t.note || "",
+    confidence: t.confidence, note: t.note || "", resume: t.resume || "",
     tabs: t.tabs.map(x => ({ id: x.id, url: x.url, title: x.title, age: x.age, fate: x.fate || null })),
   })) };
   try {
