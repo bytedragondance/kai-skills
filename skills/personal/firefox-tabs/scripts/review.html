@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>标签整理</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a66; --faint: #9b9993; --line: #e4e2dc;
+  --soft: #efede8; --accent: #2f5bd3;
+  --go: #2f7d4f; --go-bg: #e3f1e8; --done: #b4442f; --done-bg: #f7e4df;
+  --drop: #8a5a00; --drop-bg: #f6ebd3; --wait: #5d5c58; --wait-bg: #ebe9e4;
+  --stay: #6c3fb5; --stay-bg: #eee6fa;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecebe7; --muted: #a09e98; --faint: #74726d; --line: #33322f;
+    --soft: #2a2927; --accent: #7d9dff;
+    --go: #7ccf9c; --go-bg: #1f3428; --done: #f08f7a; --done-bg: #3b231e;
+    --drop: #e6b65c; --drop-bg: #362c18; --wait: #b5b3ad; --wait-bg: #2c2b29;
+    --stay: #bb9cf0; --stay-bg: #2e2440;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+a { color: inherit; }
+button, select, input { font: inherit; color: inherit; }
+
+header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1080px; margin: 0 auto; padding: 14px 20px 0; display: grid; gap: 10px; }
+.top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 18px; margin: 0; font-weight: 650; }
+.sub { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.submit { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 16px;
+  font-weight: 600; cursor: pointer; }
+.submit:hover { filter: brightness(1.08); }
+
+.meter { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--soft); }
+.meter span { display: block; height: 100%; transition: width .2s; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 1px; }
+
+nav { display: flex; gap: 2px; align-items: flex-end; flex-wrap: wrap; }
+nav button { border: 0; background: transparent; padding: 8px 12px 9px; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; font-size: 14px; }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+nav button .n { font-variant-numeric: tabular-nums; margin-left: 4px; font-size: 12px; color: var(--faint); }
+nav button.todo .n { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; }
+.navtools { margin-left: auto; display: flex; gap: 8px; align-items: center; padding-bottom: 6px; }
+.search { width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; }
+.keys { font-size: 12px; color: var(--muted); }
+kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 4px; padding: 0 4px; background: var(--panel); }
+
+main { max-width: 1080px; margin: 0 auto; padding: 14px 20px 80px; }
+.intro { color: var(--muted); font-size: 13px; margin: 2px 2px 12px; }
+.empty { text-align: center; color: var(--muted); padding: 60px 0; }
+.empty b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px;
+  box-shadow: var(--shadow); scroll-margin-top: 190px; transition: opacity .2s; }
+.card.focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card.seen { opacity: .55; }
+.card.seen:hover { opacity: 1; }
+.head { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 12px 14px 10px; cursor: pointer; }
+.titleline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ttl { font-size: 15px; font-weight: 600; border: 1px solid transparent; background: transparent;
+  border-radius: 6px; padding: 1px 4px; margin-left: -5px; max-width: 100%; }
+.ttl:hover, .ttl:focus { border-color: var(--line); background: var(--bg); outline: none; }
+.badge { font-size: 12px; border-radius: 5px; padding: 0 6px; background: var(--soft); color: var(--muted);
+  white-space: nowrap; text-decoration: none; }
+a.badge:hover { color: var(--accent); }
+.conf-低 { background: var(--done-bg); color: var(--done); }
+.conf-中 { background: var(--drop-bg); color: var(--drop); }
+.intent { border: 0; font-size: 12px; background: var(--soft); color: var(--muted); border-radius: 5px; padding: 0 2px; }
+.note { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
+.count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.right { display: flex; gap: 8px; align-items: start; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 4px 11px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"].go { background: var(--go-bg); color: var(--go); font-weight: 600; }
+.seg button[aria-pressed="true"].done { background: var(--done-bg); color: var(--done); font-weight: 600; }
+.seg button[aria-pressed="true"].drop { background: var(--drop-bg); color: var(--drop); font-weight: 600; }
+.seg button[aria-pressed="true"].wait { background: var(--wait-bg); color: var(--wait); font-weight: 600; }
+.ok { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 11px; cursor: pointer;
+  font-size: 13px; color: var(--muted); white-space: nowrap; }
+.ok:hover { border-color: var(--go); color: var(--go); }
+
+.preview { padding: 0 14px 12px; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sublabel { font-size: 12px; color: var(--faint); padding: 8px 10px 2px; }
+.tabs { list-style: none; margin: 0; padding: 0 6px 8px; border-top: 1px solid var(--line); }
+.tab { display: grid; grid-template-columns: 22px 1fr auto auto; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 8px; }
+.tab:hover { background: var(--bg); }
+.tab.f-关 .t { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
+.tab.f-不动 .t { color: var(--stay); }
+.fav { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font-size: 11px;
+  font-weight: 700; color: #fff; }
+.tinfo { min-width: 0; }
+.t { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.t:hover { text-decoration: underline; }
+.dom { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.why { color: var(--drop); }
+.age { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; min-width: 3.5em; }
+.ops { display: flex; gap: 6px; align-items: center; }
+.mini { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.mini button { border: 0; background: var(--panel); padding: 1px 7px; font-size: 12px; cursor: pointer; color: var(--muted); }
+.mini button + button { border-left: 1px solid var(--line); }
+.mini button[aria-pressed="true"].f0 { background: var(--soft); color: var(--ink); font-weight: 600; }
+.mini button[aria-pressed="true"].f1 { background: var(--done-bg); color: var(--done); font-weight: 600; }
+.mini button[aria-pressed="true"].f2 { background: var(--stay-bg); color: var(--stay); font-weight: 600; }
+.move { font-size: 12px; max-width: 7.5em; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
+.hidden { display: none !important; }
+
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink);
+  padding: 20px 22px; max-width: 480px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin: 0 0 10px; font-size: 16px; }
+dialog ul { padding-left: 18px; margin: 8px 0 16px; }
+.row { display: flex; gap: 8px; justify-content: flex-end; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.done-page { max-width: 560px; margin: 18vh auto; padding: 0 20px; text-align: center; }
+.done-page h1 { font-size: 22px; margin-bottom: 8px; }
+.err { color: var(--done); font-size: 13px; margin-top: 8px; }
+
+@media (max-width: 700px) {
+  .bar, main { padding-left: 16px; padding-right: 16px; }
+  .head { grid-template-columns: 1fr; }
+  .tab { grid-template-columns: 22px 1fr; }
+  .age { display: none; }
+  .ops { grid-column: 2; }
+  .keys { display: none; }
+  .navtools { margin-left: 0; width: 100%; }
+  .search { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="top">
+      <h1>标签整理</h1>
+      <span class="sub" id="sub"></span>
+      <span class="spacer"></span>
+      <button class="submit" id="submit">提交决定</button>
+    </div>
+    <div class="meter" id="meter"></div>
+    <div class="legend" id="legend"></div>
+    <nav id="nav"></nav>
+  </div>
+</header>
+<main id="main"></main>
+
+<dialog id="confirm">
+  <h3>提交这些决定？</h3>
+  <div id="confirmBody"></div>
+  <div class="row">
+    <button class="ghost" id="cancel">再看看</button>
+    <button class="submit" id="go">提交</button>
+  </div>
+  <div class="err" id="err"></div>
+</dialog>
+
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const OPTS = DATA.decisions;              // kind -> decision options
+const INTENTS = DATA.intents;
+const KINDS = ["事情", "主题", "清理"];
+const KIND_HINT = {
+  "事情": "会结束的事：做完就整组关掉。进行中的会各自成为一个 Firefox 组。",
+  "主题": "长期、零散的收藏，按主题收进一个组。AI 已经把太久没看的标成「关」。",
+  "清理": "登录页、过期页、消遣和重复页，没有要留的内容。默认整组关掉。",
+};
+const DEFAULT_LABEL = { "事情": "跟着走", "主题": "留", "清理": "关" };
+const DEC_CLASS = { "进行中": "go", "保留": "go", "做完": "done", "关掉": "done", "放弃": "drop", "待定": "wait" };
+const COLORS = { go: "var(--go)", done: "var(--done)", dup: "var(--drop)", stay: "var(--wait)" };
+
+const things = DATA.things.map((t, i) => ({ ...t, key: i, seen: false }));
+const needsLook = t => t.confidence !== "高";
+const expanded = new Set(things.filter(t => needsLook(t) && t.tabs.length <= 10).map(t => t.key));
+let view = things.some(needsLook) ? "look" : "事情";
+let focusKey = null, nextKey = things.length, query = "";
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
+}
+const stop = e => e.stopPropagation();
+
+function domain(url) {
+  if (url.startsWith("file:")) return "本地文件";
+  if (url.startsWith("moz-extension:")) return "扩展页面";
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url.slice(0, 40); }
+}
+function hue(s) { let x = 0; for (const c of s) x = (x * 31 + c.charCodeAt(0)) % 360; return x; }
+function width(s) { return [...s].reduce((n, ch) => n + (ch.charCodeAt(0) > 255 ? 2 : 1), 2); }
+
+// Where a tab ends up; mirrors destination() in tab_review.py.
+function outcome(t, tab) {
+  if (tab.fate === "不动" || t.decision === "待定") return "stay";
+  if (tab.fate === "关") return "done";
+  if (t.kind === "清理") return t.intent === "重复" ? "dup" : "done";
+  return (t.decision === "进行中" || t.decision === "保留") ? "go" : "done";
+}
+
+function tally() {
+  const c = { go: 0, done: 0, dup: 0, stay: 0, groups: 0 };
+  for (const t of things) {
+    let moving = 0;
+    for (const tab of t.tabs) { const o = outcome(t, tab); c[o]++; if (o === "go") moving++; }
+    if (moving) c.groups++;
+  }
+  return c;
+}
+
+function renderHeader() {
+  const c = tally(), total = c.go + c.done + c.dup + c.stay;
+  const left = things.filter(t => t.tabs.length && needsLook(t) && !t.seen).length;
+  document.getElementById("sub").textContent =
+    `${total} 个标签 · 快照 ${DATA.taken}` + (left ? ` · 还有 ${left} 件要你看` : " · 都看过了");
+  document.getElementById("meter").replaceChildren(...["go", "done", "dup", "stay"].map(k =>
+    h("span", { style: `width:${total ? c[k] / total * 100 : 0}%;background:${COLORS[k]}` })));
+  const item = (k, label, n) => h("span", {}, h("i", { class: "dot", style: `background:${COLORS[k]}` }), label, " ", h("b", {}, String(n)));
+  document.getElementById("legend").replaceChildren(
+    item("go", `进 ${c.groups} 个组`, c.go), item("done", "进「做完」组", c.done),
+    item("dup", "进「重复」组", c.dup), item("stay", "不动", c.stay));
+
+  const count = v => v === "look" ? left : things.filter(t => t.kind === v && t.tabs.length).length;
+  const tabs = [["look", "需要你看"], ...KINDS.map(k => [k, k])];
+  const searchBox = document.getElementById("q") || h("input", {
+    id: "q", class: "search", type: "search", placeholder: "搜索标题或网址  /",
+    oninput: e => { query = e.target.value.trim().toLowerCase(); renderMain(); },
+  });
+  document.getElementById("nav").replaceChildren(
+    ...tabs.map(([v, label]) => h("button", {
+      "aria-selected": String(view === v), class: v === "look" && left ? "todo" : "",
+      onclick: () => { view = v; focusKey = null; render(); window.scrollTo(0, 0); },
+    }, label, h("span", { class: "n" }, String(count(v))))),
+    h("div", { class: "navtools" }, searchBox,
+      h("span", { class: "keys" }, h("kbd", {}, "j"), h("kbd", {}, "k"), " 切换 · ", h("kbd", {}, "1"), "–", h("kbd", {}, "4"),
+        " 决定 · ", h("kbd", {}, "↵"), " 就这样")));
+}
+
+function matches(t, tab) {
+  return !query || (tab.title + " " + tab.url).toLowerCase().includes(query) || t.title.toLowerCase().includes(query);
+}
+
+function moveTab(fromKey, tabId, target) {
+  const from = things.find(t => t.key === fromKey);
+  const idx = from.tabs.findIndex(x => x.id === tabId);
+  const [tab] = from.tabs.splice(idx, 1);
+  let to;
+  if (target === "__new") {
+    const title = (prompt("新事情叫什么？") || "").trim();
+    if (!title) { from.tabs.splice(idx, 0, tab); render(); return; }
+    to = { kind: "事情", title, intent: "事务", decision: "进行中", confidence: "高", note: "你新建的",
+           tabs: [], key: nextKey++, seen: true };
+    things.push(to); expanded.add(to.key);
+  } else {
+    to = things.find(t => t.key === Number(target));
+  }
+  tab.fate = null; tab.why = "";
+  to.tabs.push(tab);
+  render();
+}
+
+function setDecision(t, d) { t.decision = d; t.seen = true; render(); }
+
+function tabRow(t, tab, others) {
+  const dom = domain(tab.url);
+  const fates = [[null, DEFAULT_LABEL[t.kind], "f0"], ["关", "关", "f1"], ["不动", "不动", "f2"]]
+    .filter(([f]) => !(t.kind === "清理" && f === "关"));
+  return h("li", { class: "tab" + (tab.fate ? " f-" + tab.fate : "") },
+    h("span", { class: "fav", style: `background:hsl(${hue(dom)} 45% 48%)` }, dom.slice(0, 1).toUpperCase()),
+    h("span", { class: "tinfo" },
+      h("a", { class: "t", href: tab.url, target: "_blank", rel: "noreferrer", title: tab.title }, tab.title || tab.url),
+      h("span", { class: "dom" }, tab.why ? h("span", { class: "why" }, tab.why + " · ") : null,
+        dom + (tab.group ? ` · 现在在「${tab.group}」` : " · 未分组"))),
+    h("span", { class: "age" }, `${tab.age} 天`),
+    h("span", { class: "ops" },
+      h("span", { class: "mini" }, fates.map(([f, label, cls]) => h("button", {
+        class: cls, "aria-pressed": String((tab.fate || null) === f),
+        title: f === "不动" ? "留在原处，不跟着这件事走" : f === "关" ? "单独把这个标签放进「做完」组" : "按这件事的决定走",
+        onclick: () => { tab.fate = f; t.seen = true; render(); },
+      }, label))),
+      h("select", { class: "move", "aria-label": "移到别的地方", onchange: e => moveTab(t.key, tab.id, e.target.value) },
+        h("option", { value: "", selected: true, disabled: true }, "移到…"),
+        h("option", { value: "__new" }, "＋ 新事情…"),
+        KINDS.map(k => h("optgroup", { label: k },
+          others.filter(o => o.kind === k).map(o => h("option", { value: o.key }, o.title)))))));
+}
+
+function card(t) {
+  const visible = t.tabs.filter(tab => matches(t, tab));
+  if (query && !visible.length) return null;
+  const open = expanded.has(t.key) || !!query;
+  const ages = t.tabs.map(x => x.age);
+  const ageText = Math.min(...ages) === Math.max(...ages) ? `${ages[0]} 天` : `${Math.min(...ages)}–${Math.max(...ages)} 天`;
+  const toggle = () => { expanded.has(t.key) ? expanded.delete(t.key) : expanded.add(t.key); focusKey = t.key; render(); };
+
+  const seg = h("div", { class: "seg", onclick: stop }, OPTS[t.kind].map(d => h("button", {
+    class: DEC_CLASS[d], "aria-pressed": String(t.decision === d), onclick: () => setDecision(t, d) }, d)));
+  const okBtn = view === "look" && !t.seen
+    ? h("button", { class: "ok", onclick: e => { stop(e); markSeen(t); }, title: "AI 的建议没问题（回车）" }, "✓ 就这样")
+    : null;
+
+  const head = h("div", { class: "head", onclick: toggle },
+    h("div", { class: "titleline" },
+      h("input", { class: "ttl", value: t.title, size: Math.max(6, width(t.title)),
+        title: "进行中的事情和主题会用这个名字建 Firefox 组", onclick: stop,
+        onchange: e => { t.title = e.target.value.trim() || t.title; t.seen = true; render(); },
+        onkeydown: e => { if (e.key === "Enter") e.target.blur(); stop(e); } }),
+      view === "look" ? h("span", { class: "badge" }, t.kind) : null,
+      h("select", { class: "intent", onclick: stop, onchange: e => { t.intent = e.target.value; render(); } },
+        INTENTS.map(i => h("option", { value: i, selected: i === t.intent }, i))),
+      t.project ? h("a", { class: "badge", onclick: stop, title: "在 Obsidian 打开项目",
+        href: `obsidian://open?vault=${encodeURIComponent(DATA.vaultName)}&file=${encodeURIComponent("20_Projects/" + t.project)}` },
+        "◆ " + t.project) : null,
+      needsLook(t) ? h("span", { class: "badge conf-" + t.confidence }, "AI 把握" + t.confidence) : null,
+      h("span", { class: "count" }, `${t.tabs.length} 个 · ${ageText}`)),
+    h("div", { class: "right" }, seg, okBtn),
+    t.note ? h("div", { class: "note" }, t.note) : null);
+
+  let body;
+  if (open) {
+    const others = things.filter(o => o.key !== t.key && o.tabs.length);
+    if (t.kind === "主题") {
+      const close = visible.filter(x => x.fate === "关"), rest = visible.filter(x => x.fate !== "关");
+      body = h("ul", { class: "tabs" },
+        close.length ? h("li", { class: "sublabel" }, `建议关 ${close.length}`) : null,
+        close.map(tab => tabRow(t, tab, others)),
+        close.length && rest.length ? h("li", { class: "sublabel" }, `留在「${t.title}」 ${rest.length}`) : null,
+        rest.map(tab => tabRow(t, tab, others)));
+    } else {
+      body = h("ul", { class: "tabs" }, visible.map(tab => tabRow(t, tab, others)));
+    }
+  } else {
+    const closing = t.tabs.filter(x => x.fate === "关").length;
+    body = h("div", { class: "preview", onclick: toggle },
+      (closing ? `建议关 ${closing} 个 · ` : "") + t.tabs.slice(0, 4).map(x => x.title).join(" · ") + (t.tabs.length > 4 ? " …" : ""));
+  }
+  return h("div", { class: "card" + (focusKey === t.key ? " focus" : "") + (view === "look" && t.seen ? " seen" : ""),
+    "data-key": t.key }, head, body);
+}
+
+function viewThings() {
+  const live = things.filter(t => t.tabs.length);
+  if (view === "look") {
+    const rank = { "低": 0, "中": 1 };
+    return live.filter(needsLook).sort((a, b) => rank[a.confidence] - rank[b.confidence]);
+  }
+  const order = OPTS[view];
+  return live.filter(t => t.kind === view).sort((a, b) => order.indexOf(a.decision) - order.indexOf(b.decision));
+}
+
+function renderMain() {
+  const main = document.getElementById("main");
+  const list = viewThings();
+  const intro = view === "look"
+    ? "AI 拿不准的放在这里，每件都已经给了建议。没问题就点「✓ 就这样」，或者直接改。AI 有把握的在后面三个分类里，不看也会按建议处理。"
+    : KIND_HINT[view];
+  const cards = list.map(card).filter(Boolean);
+  main.replaceChildren(h("p", { class: "intro" }, intro),
+    ...(cards.length ? cards : [h("div", { class: "empty" }, h("b", {}, view === "look" ? "都看过了" : "这里没有"),
+      view === "look" ? "可以提交了，或者到其他分类里翻翻。" : "")]));
+}
+
+function render() {
+  const q = document.activeElement && document.activeElement.id === "q";
+  renderHeader(); renderMain();
+  if (q) document.getElementById("q").focus();
+}
+
+function markSeen(t) {
+  t.seen = true;
+  const keys = viewThings().filter(x => !x.seen).map(x => x.key);
+  focusKey = keys.find(k => k > t.key) ?? keys[0] ?? null;
+  if (focusKey != null) expanded.add(focusKey);
+  render();
+  if (focusKey != null) document.querySelector(`.card[data-key="${focusKey}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (document.getElementById("confirm").open) return;
+  if (e.key === "/") { e.preventDefault(); document.getElementById("q").focus(); return; }
+  const keys = [...document.querySelectorAll(".card")].map(el => Number(el.dataset.key));
+  if (e.key === "j" || e.key === "k") {
+    const i = keys.indexOf(focusKey);
+    focusKey = keys[Math.max(0, Math.min(keys.length - 1, i < 0 ? 0 : i + (e.key === "j" ? 1 : -1)))];
+    render();
+    document.querySelector(`.card[data-key="${focusKey}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
+  const t = things.find(x => x.key === focusKey);
+  if (!t) return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= OPTS[t.kind].length) setDecision(t, OPTS[t.kind][n - 1]);
+  if (e.key === "Enter") markSeen(t);
+  if (e.key === " ") { e.preventDefault(); expanded.has(t.key) ? expanded.delete(t.key) : expanded.add(t.key); render(); }
+});
+
+const dlg = document.getElementById("confirm");
+document.getElementById("submit").addEventListener("click", () => {
+  const c = tally();
+  const groups = things.filter(t => t.tabs.some(x => outcome(t, x) === "go")).map(t => t.title);
+  const left = things.filter(t => t.tabs.length && needsLook(t) && !t.seen).length;
+  document.getElementById("confirmBody").replaceChildren(
+    h("p", {}, "决定会写进 Obsidian。浏览器这时还不会变，分组要等你在对话里确认计划之后。"),
+    left ? h("p", { class: "why" }, `还有 ${left} 件 AI 拿不准的你没看过，会按 AI 的建议处理。`) : null,
+    h("ul", {},
+      h("li", {}, `${c.go} 个标签进 ${c.groups} 个组：${groups.join("、") || "无"}`),
+      h("li", {}, `${c.done} 个进「做完」组，${c.dup} 个进「重复」组`),
+      h("li", {}, `${c.stay} 个不动`)));
+  document.getElementById("err").textContent = "";
+  dlg.showModal();
+});
+document.getElementById("cancel").addEventListener("click", () => dlg.close());
+document.getElementById("go").addEventListener("click", async () => {
+  const payload = { things: things.filter(t => t.tabs.length).map(t => ({
+    kind: t.kind, title: t.title, project: t.project || null, intent: t.intent, decision: t.decision,
+    confidence: t.confidence, note: t.note || "",
+    tabs: t.tabs.map(x => ({ id: x.id, url: x.url, title: x.title, age: x.age, fate: x.fate || null })),
+  })) };
+  try {
+    const res = await fetch("/submit?t=" + encodeURIComponent(DATA.token), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.status);
+    dlg.close();
+    document.body.replaceChildren(h("div", { class: "done-page" },
+      h("h1", {}, "已保存"),
+      h("p", { class: "sub" }, "决定已写进 Obsidian。回到对话里确认分组计划。这个标签页可以关掉了。"),
+      h("p", {}, h("a", { href: out.obsidian }, "在 Obsidian 打开记录"))));
+  } catch (err) {
+    document.getElementById("err").textContent = "没保存成功：" + err.message + "（服务可能已经停了，请回到对话里看）";
+  }
+});
+
+render();
+</script>
+</body>
+</html>

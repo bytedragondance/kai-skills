@@ -73,6 +73,10 @@ Off the main flow entirely.
 
 **`/setup-matt-pocock-skills`** — run before your first engineering flow to configure the issue tracker, triage labels, and doc layout the other skills assume. Custom issue trackers also work.
 
+## Personal browser setup
+
+- `/firefox-tabs` — Sort open Firefox tabs into things, topics, and cleanup with `firefox-agent`, review them on a local page, record the decisions in LifeVault, and regroup the browser. Finished (`做完`) and duplicate (`重复`) tabs are archived to the vault and closed only after you approve.
+
 ## Personal project continuation
 
 - `/advance-project` — Resume a project, consolidate parallel work, or close a delivery with current evidence and a usable handoff. It uses the project's existing layout and does not require the engineering-flow setup above. For isolated edits, handle the edit directly.
