@@ -314,6 +314,26 @@ class RenderTests(unittest.TestCase):
         page = render.render_page(b)
         self.assertLess(page.index("等你决定 · 1"), page.index("用的时候顺便看 · 1"))
 
+    def test_autonomy_policy_labels_and_default_dates(self):
+        self.add_tasks()
+        tasks = self.scan["projects"][0]["backlog_tasks"]["tasks"]
+        tasks.append({**tasks[0], "id": "T-12", "title": "Default approval", "path": tasks[0]["path"],
+                      "labels": ["needs-human:decision", "attn:light", "default-on:2026-10-22"]})
+        tasks.append({**tasks[0], "id": "T-13", "title": "Backed-up write", "status": "To Do", "path": tasks[0]["path"],
+                      "labels": ["agent-ready", "backup-reversible"]})
+        self.brief["decisions"][0]["default_on"] = "2026-10-23"
+        b = render.prepare_brief(self.brief, self.scan)
+        v = render.task_views(b)
+        self.assertIn("T-13", [t["id"] for t in v["abundant"]])
+        self.assertNotIn("T-13", [t["id"] for t in v["conflicts"]])
+        page, report = render.render_page(b), render.render_markdown(b)
+        for out in (page, report):
+            self.assertIn("2026-10-22 不回复按推荐执行", out)
+            self.assertIn("2026-10-23 不回复按推荐执行", out)
+            self.assertIn("有备份可回滚", out)
+        with self.assertRaises(ValueError):
+            render.prepare_brief({**self.brief, "decisions": [{**self.brief["decisions"][0], "default_on": "soon"}]}, self.scan)
+
     def test_cli_validates_before_writing(self):
         brief_path, scan_path = self.root / "brief.json", self.root / "scan.json"
         scan_path.write_text(json.dumps(self.scan))

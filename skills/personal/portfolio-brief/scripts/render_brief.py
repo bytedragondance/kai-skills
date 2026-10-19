@@ -11,6 +11,7 @@ notes on coverage. Every project fact appears in one place only.
 import datetime as dt
 import copy
 import html
+import re
 import json
 import os
 import sys
@@ -25,7 +26,10 @@ ATTN = {"attn:light": "看一眼", "attn:read": "要读材料", "attn:focus": "�
 DECISION_ATTN = {"light": "attn:light", "read": "attn:read", "focus": "attn:focus"}
 NEEDS = {"needs-human:decision": "决定", "needs-human:acceptance": "验收", "needs-human:feedback": "使用反馈"}
 SIZE_ORDER = {"size:s": 0, "size:m": 1, "size:l": 2}
-LABELS = {"mainline": "主线", "size:s": "额度小", "size:m": "额度中", "size:l": "额度大", "gpu": "本地 GPU"}
+LABELS = {"mainline": "主线", "size:s": "额度小", "size:m": "额度中", "size:l": "额度大", "gpu": "本地 GPU",
+          "backup-reversible": "有备份可回滚"}
+DEFAULT_ON = "default-on:"
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SCAN_ERRORS = {
     "Upstream comparison unavailable": "没有可比较的 upstream，领先/落后未知（未联网刷新）",
     "Git repository could not be established": "无法确认 Git 仓库，Git 情况未知",
@@ -184,6 +188,8 @@ def prepare_brief(brief, scan):
                 raise ValueError(f"{section_name}: missing description or timing/default")
             if section_name == "decisions" and item.get("attn") not in (None, *DECISION_ATTN):
                 raise ValueError("decisions: attn must be light, read, focus or omitted")
+            if section_name == "decisions" and item.get("default_on") is not None and not ISO_DATE.match(str(item["default_on"])):
+                raise ValueError("decisions: default_on must be a YYYY-MM-DD date or omitted")
     for p in b["projects"]:
         for t in (p.get("backlog_tasks") or {}).get("tasks") or []:
             t["sources"] = [{"path": t["path"], "line": 1, "observed_at": scan["observed_at"],
@@ -251,9 +257,20 @@ def task_tags(t):
     tags = [NEEDS[x] for x in labels if x in NEEDS]
     tags += [("交付后" if later else "") + ATTN[x] for x in labels if x in ATTN]
     tags += [LABELS[x] for x in labels if x in LABELS]
+    if default_on(labels):
+        tags.append(default_tag(default_on(labels)))
     if t["status"] == "Waiting" and not set(labels) & set(NEEDS):
         tags.append("缺少 needs-human 标签，按待判断处理")
     return tags
+
+
+def default_on(labels):
+    """The date a C-class ask runs its recommendation if unanswered (Attune autonomy policy v1)."""
+    return next((x[len(DEFAULT_ON):] for x in labels if x.startswith(DEFAULT_ON)), None)
+
+
+def default_tag(date):
+    return f"{date} 不回复按推荐执行"
 
 
 def plain(text):
@@ -284,7 +301,8 @@ def asks(b, v):
                                     d.get("if_wait") and f'不处理会怎样：{d["if_wait"]}') if x)
         items.append({"project": d["project"], "question": d.get("question"), "why": why, "attn": rank,
                       "mainline": False, "sources": d["sources"], "irreversible": False,
-                      "tags": ["决定"] + ([ATTN[DECISION_ATTN[d["attn"]]]] if d.get("attn") else [])})
+                      "tags": ["决定"] + ([ATTN[DECISION_ATTN[d["attn"]]]] if d.get("attn") else [])
+                              + ([default_tag(d["default_on"])] if d.get("default_on") else [])})
     order = [p["alias"] for p in b["projects"]]
     return sorted(items, key=lambda i: (i["attn"], not i["mainline"], order.index(i["project"])))
 
