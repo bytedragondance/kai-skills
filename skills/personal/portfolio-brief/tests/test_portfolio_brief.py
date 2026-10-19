@@ -177,8 +177,9 @@ class RenderTests(unittest.TestCase):
         prepared = render.prepare_brief(self.brief, self.scan)
         page, report = render.render_page(prepared), render.render_markdown(prepared)
         self.assertEqual(len(prepared['decisions']), 1)
-        self.assertIn('1 条待决定事项 · 1 条自然使用反馈 · 1 条默认停放事项', page)
-        decision_text = report.split('## 需要你决定', 1)[1].split('## 自然使用反馈', 1)[0]
+        self.assertIn('需要你决定 <b>1</b> 件 · 1 处等你用的时候顺便看', page)
+        self.assertIn('决定 1</span><span class="chip ">顺便反馈 1</span><span class="chip ">停放 1', page)
+        decision_text = report.split('## 需要你决定', 1)[1].split('## 项目一览', 1)[0]
         self.assertNotIn('Observe charging', decision_text)
         self.assertNotIn('Optional inventory', decision_text)
         self.assertIn('Observe charging', report)
@@ -187,7 +188,8 @@ class RenderTests(unittest.TestCase):
         self.assertIn('Use existing dashboard', report)
         self.assertIn('已跟踪改动 59', report)
         self.assertIn('4000 / 4001', report)
-        self.assertIn('事实/来源日期 未知', report)
+        self.assertIn('（未注明日期）', report)
+        self.assertIn('| P1 · ', report)
         self.assertNotIn('<script>', report)
 
     def test_feedback_and_parked_need_in_scope_provenance_and_descriptions(self):
@@ -265,17 +267,25 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(ids("abundant"), ["T-7", "T-6"])
         self.assertEqual(ids("gpu"), ["T-8"])
         self.assertEqual(ids("conflicts"), ["T-9"])
-        self.assertEqual(ids("scarce"), ["T-11", "T-1"])
+        self.assertEqual(ids("scarce"), ["T-11", "T-7"])
         self.assertEqual(v["in_flight"], {"P1": 1})
         self.assertNotIn("sources", self.scan["projects"][0]["backlog_tasks"]["tasks"][0])
         page, report = render.render_page(b), render.render_markdown(b)
-        self.assertIn("4 条待决定事项 · 1 条自然使用反馈 · 1 条默认停放事项", page)
+        self.assertIn("需要你决定 <b>4</b> 件，其中 1 件看一眼就能定 · 1 处等你用的时候顺便看", page)
+        self.assertIn("主线上在等你的：P1 Focus decision", page)
+        self.assertIn("交付后要读材料", page)
+        others = page.split("其他待办", 1)[1].split("</ul>", 1)[0]
+        self.assertIn("Blocked", others)
+        self.assertNotIn("Mainline prep", others)
+        more = page.split("额度多时再加（不需要你）", 2)[2].split("</ul>", 1)[0]
+        self.assertIn("Big safe run", more)
+        self.assertNotIn("Mainline prep", more)
         self.assertIn("缺少 needs-human 标签", page)
         self.assertIn("不可逆", page)
         self.assertIn("Restart when needed", page)
         self.assertIn("未说明，按紧张处理", page)
         self.assertIn("t-1%20-%20Focus%20decision.md#L1", page)
-        needs_md = report.split("## 需要你（来自任务状态", 1)[1].split("## 远端额度紧张", 1)[0]
+        needs_md = report.split("## 需要你决定", 1)[1].split("## 项目一览", 1)[0]
         self.assertNotIn("Use it once", needs_md)
         self.assertIn("Light approval", needs_md.split("Focus decision")[0])
         self.assertIn("Restart when needed", report)
@@ -284,12 +294,25 @@ class RenderTests(unittest.TestCase):
     def test_capacity_and_restated_backlog_items_are_validated(self):
         self.add_tasks()
         self.brief["capacity"] = "abundant"
-        self.assertIn("充裕（用户说明）", render.render_page(render.prepare_brief(self.brief, self.scan)))
+        self.assertIn("充裕（你说明的）", render.render_page(render.prepare_brief(self.brief, self.scan)))
         for brief in [{**self.brief, "capacity": "lots"},
+                      {**self.brief, "decisions": [{**self.brief["decisions"][0], "attn": "quick"}]},
                       {**self.brief, "decisions": [{"project": "P1", "question": "Dup", "sources": [
                           {**self.source, "path": "backlog/tasks/t-1 - Focus decision.md", "line": 1}]}]}]:
             with self.subTest(brief=brief.get("capacity")), self.assertRaises(ValueError):
                 render.prepare_brief(brief, self.scan)
+
+    def test_asks_merge_by_attention_and_rows_group_by_turn(self):
+        self.add_tasks()
+        self.brief["decisions"][0]["attn"] = "light"
+        self.scan["projects"].append({**self.scan["projects"][0], "alias": "P2", "backlog_tasks": None})
+        self.brief["projects"].append({"alias": "P2", "today": {"outcome": "Try it", "mode": "feedback", "reason": "Installed"}})
+        b = render.prepare_brief(self.brief, self.scan)
+        ctx = render.Context(b)
+        self.assertEqual([a["question"] for a in ctx.asks][:2], ["Light approval", "<script>choose</script>"])
+        self.assertEqual([ctx.group(p) for p in b["projects"]], ["decide", "feedback"])
+        page = render.render_page(b)
+        self.assertLess(page.index("等你决定 · 1"), page.index("用的时候顺便看 · 1"))
 
     def test_cli_validates_before_writing(self):
         brief_path, scan_path = self.root / "brief.json", self.root / "scan.json"
@@ -309,7 +332,7 @@ class RenderTests(unittest.TestCase):
         self.assertTrue(html_path.is_file())
         text_path = html_path.with_suffix('.md')
         self.assertTrue(text_path.is_file())
-        self.assertIn('Attune 项目汇报', text_path.read_text())
+        self.assertIn('# 项目汇报', text_path.read_text())
         self.assertIn(WHEN, text_path.read_text())
 
 

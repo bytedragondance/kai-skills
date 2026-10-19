@@ -41,7 +41,8 @@ Done when every allowlisted project appears; a missing path is reported, not ski
 - `Waiting` with `needs-human:feedback` goes to natural-use feedback.
 - `Parked` goes to parked, with its restart condition.
 - `To Do` + `agent-ready` with dependencies done goes to *when remote capacity is abundant*, mainline first. `gpu` tasks are listed separately, by local GPU availability rather than remote quota.
-- The next mainline steps per project go to *when remote capacity is scarce*.
+- The next mainline steps an agent can take now (`In Progress`, or a ready `To Do`; never `irreversible`) go to *when remote capacity is scarce*. Mainline tasks that are `Waiting` stay in *needs you* (noted as "主线上在等你的") or feedback, because their next step is the user's, not a model run. *Abundant* then lists only what it adds beyond the scarce list.
+- Open tasks that fit none of these (not ready, not `agent-ready`) are still listed in the project's detail as other to-dos.
 - `irreversible` is flagged wherever it appears; `agent-ready` + `irreversible` is shown as a label conflict.
 
 Do not restate these tasks as `decisions`, `feedback` or `parked` in the brief: the renderer rejects brief items that cite `backlog/tasks/` files. For Backlog projects, read the status document only for workstream narrative, `today`, unknowns and anything the tasks do not cover, and report label gaps as unknowns or risks rather than re-classifying them.
@@ -70,7 +71,7 @@ Write `$RUN_DIR/brief.json`:
  "projects": [{"alias": "P1",
                "today": {"outcome": "One useful result", "mode": "feedback", "reason": "Why this is the right next step"},
                "workstreams": [{"name": "", "state": "", "next": "", "sources": []}], "unknowns": [""]}],
- "decisions": [{"project": "P1", "group": "", "question": "", "why_now": "", "if_wait": "",
+ "decisions": [{"project": "P1", "group": "", "question": "", "why_now": "", "if_wait": "", "attn": "light",
                 "sources": [{"path": "docs/decisions.md", "line": 12,
                              "source_date": null, "observed_at": "2026-10-17T12:00:00+00:00"}]}],
  "feedback": [{"project": "P1", "question": "What to observe", "when": "At the next natural use, without a separate task", "sources": []}],
@@ -86,6 +87,7 @@ Rules:
 - Each decision needs a real project-relative source file and line, the source's stated date (`null` if unknown), and the actual timezone-qualified observation time. Do not substitute file modification time for a decision date. Workstream source links use the same shape. The renderer checks provenance structure and file boundaries, not the truth of the agent's interpretation; compare each decision with its cited passage before delivery.
 - **Plain language.** Write in the user's language. Name a workstream by what it does; if the project uses a code name, add a few words saying what it means. No unexplained jargon or internal IDs.
 - **Decisions** are choices that block a specific next action: an execution authorization, material scope change or trade-off. Say what action waits and what happens meanwhile. Completed or superseded approvals are excluded; do not invent urgency.
+- A decision's optional `attn` is how much attention answering it takes, on the convention's scale: `light` (a glance, e.g. yes/no on a prepared plan), `read` (needs reading or comparing), `focus` (needs dedicated time). It orders document decisions together with Backlog asks; omit it when unclear, and the decision sorts after the rated ones.
 - Put ordinary real-use/device feedback in **`feedback`**, with its natural occasion. Put old options with a safe inactive default in **`parked`**. Both need the same source format as decisions. They do not increase the decision count. The renderer validates structure, not these semantic judgments; the executor still checks each classification against its passage.
 - **Advisory work** must be startable within authorization the user has already given, with a stated reason it does not need them. It is a suggestion: never start it.
 - **Risks** worth flagging:
@@ -98,9 +100,16 @@ Rules:
 
 ## 4. Render and hand off
 
-Run `python3 -I scripts/render_brief.py "$RUN_DIR/brief.json" "$RUN_DIR/scan.json"`. One command validates the input and produces matching HTML and a complete Markdown report under the system temp directory. It prints the HTML path; the `.md` file has the same stem. This local report is the result record, not another writable project-state store. Git failures and Backlog truncation appear in both formats. Correct validation errors before delivery, without hand-editing the HTML.
+Run `python3 -I scripts/render_brief.py "$RUN_DIR/brief.json" "$RUN_DIR/scan.json"`. One command validates the input and produces matching HTML and a complete Markdown report under the system temp directory. It prints the HTML path; the `.md` file has the same stem.
 
-Use that report to give the user a complete useful answer: the actual decision(s), each project's current result and next step with fact dates, safe suggestions, and important unknowns. Natural-use feedback and parked options remain separate. Include the artifact links as supporting material; counts and a temporary HTML link alone do not satisfy the request. Preserve source dates and limitations if shortening the generated text.
+The report is organized for reading, with each fact in one place:
+1. a one-line summary (how many decisions, how many are a glance, capacity mode);
+2. **需要你决定**: one batched list of Backlog asks and document decisions, ordered by attention weight, each one line with its full material one click away;
+3. **项目一览**: one table, grouped by whose turn it is (等你决定 → 可以推进 → 用的时候顺便看 → 暂停), with today's step, what needs the user, the newest fact date and risk tags per row; each row expands to its reason, workstreams, tasks, feedback, parked items, risks, unknowns and Git facts;
+4. **模型额度**: the scarce and abundant lists and local GPU;
+5. notes on read-only scope and coverage. This local report is the result record, not another writable project-state store. Git failures and Backlog truncation appear in both formats. Correct validation errors before delivery, without hand-editing the HTML.
+
+Use that report to give the user a complete useful answer in the same shape: the decision(s) first, then one project table (today's step, fact date, what needs them), then the few risks and unknowns that matter. Do not repeat a project across several lists. Natural-use feedback and parked options remain separate. Include the artifact links as supporting material; counts and a temporary HTML link alone do not satisfy the request. Preserve source dates and limitations if shortening the generated text.
 
 Writing a sanitized observation into Attune's development log is separate from the read-only portfolio operation and follows the user's existing authorization. Do not reopen a trial, mark benefit established, or start recurring work merely because a report ran successfully.
 
