@@ -15,6 +15,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 MODES = {"proceed": "可直接推进", "feedback": "需真实使用反馈", "paused": "暂停本轮新动作"}
+CAPACITY = {"abundant": "充裕", "scarce": "紧张"}
+ATTN = {"attn:light": "看一眼", "attn:read": "要读材料", "attn:focus": "要专门安排"}
+NEEDS = {"needs-human:decision": "决定", "needs-human:acceptance": "验收", "needs-human:feedback": "使用反馈"}
+SIZE_ORDER = {"size:s": 0, "size:m": 1, "size:l": 2}
 
 CSS = """
 :root{--bg:#fbfaf7;--card:#fff;--text:#2c2c2a;--muted:#6b6a65;--line:#e3e1d9;--accent:#534ab7;--warn:#854f0b;--warnbg:#faeeda}
@@ -81,7 +85,7 @@ def prepare_brief(brief, scan):
         if set(p) - {"alias", "workstreams", "unknowns", "today"}:
             raise ValueError("Do not copy Git/count/date/domain facts into the brief; they come from SCAN.json")
         observed = by_alias[p["alias"]]
-        p.update({key: observed.get(key) for key in ("path", "domain", "git", "backlog")})
+        p.update({key: copy.deepcopy(observed.get(key)) for key in ("path", "domain", "git", "backlog", "backlog_tasks")})
         p["observed_at"] = scan["observed_at"]
         p.setdefault("unknowns", [])
         if p.get("today") is not None:
@@ -96,23 +100,98 @@ def prepare_brief(brief, scan):
         for w in p.get("workstreams", []):
             if w.get("sources"):
                 check_sources(w["sources"], p["path"])
+    if b.get("capacity") not in (None, *CAPACITY):
+        raise ValueError("capacity must be abundant, scarce or null (as the user stated it)")
     for section_name in ("decisions", "advisory", "risks", "feedback", "parked"):
         for item in b.get(section_name, []):
             if item.get("project") not in by_alias:
                 raise ValueError(f"{section_name}: project is outside this scan")
             if section_name in ("decisions", "feedback", "parked") or item.get("sources"):
                 check_sources(item.get("sources"), by_alias[item["project"]]["path"])
+            if section_name in ("decisions", "feedback", "parked") and has_tasks(by_alias[item["project"]]) and any(
+                    Path(src["path"]).parts[:2] == ("backlog", "tasks") for src in item["sources"]):
+                raise ValueError(f"{section_name}: Backlog tasks are classified from the scan; do not restate them in the brief")
             fields = {"feedback": ("question", "when"), "parked": ("item", "default")}.get(section_name, ())
             if any(not isinstance(item.get(key), str) or not item[key].strip() for key in fields):
                 raise ValueError(f"{section_name}: missing description or timing/default")
+    for p in b["projects"]:
+        for t in (p.get("backlog_tasks") or {}).get("tasks") or []:
+            t["sources"] = [{"path": t["path"], "line": 1, "observed_at": scan["observed_at"],
+                             "source_date": (t.get("updatedAt") or "")[:10] or None}] if t.get("path") else []
+            if t["sources"]:
+                check_sources(t["sources"], p["path"])
     b["generated_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     return b
+
+
+def has_tasks(p):
+    return bool(p.get("backlog_tasks") and p["backlog_tasks"].get("tasks") is not None)
+
+
+def task_views(b):
+    """Classify Backlog tasks by status and labels (Attune convention v0 §9); no inference."""
+    v = {"needs": [], "feedback": [], "parked": [], "abundant": [], "gpu": [], "scarce": [], "in_flight": {}, "conflicts": []}
+    for p in b["projects"]:
+        tasks = (p.get("backlog_tasks") or {}).get("tasks") or []
+        for t in tasks:
+            t["project"] = p["alias"]
+            labels = set(t.get("labels") or [])
+            if t["status"] == "Waiting":
+                if "needs-human:feedback" in labels:
+                    v["feedback"].append(t)
+                else:
+                    v["needs"].append(t)
+            elif t["status"] == "Parked":
+                v["parked"].append(t)
+            elif t["status"] == "To Do" and "agent-ready" in labels and t.get("isReady"):
+                if "irreversible" in labels:
+                    v["conflicts"].append(t)
+                else:
+                    v["gpu" if "gpu" in labels else "abundant"].append(t)
+            if t["status"] == "In Progress" and labels & set(ATTN):
+                v["in_flight"][p["alias"]] = v["in_flight"].get(p["alias"], 0) + 1
+        mainline = [t for t in tasks if "mainline" in (t.get("labels") or [])
+                    and (t["status"] in ("In Progress", "Waiting") or (t["status"] == "To Do" and t.get("isReady")))]
+        order = {"In Progress": 0, "Waiting": 1, "To Do": 2}
+        mainline.sort(key=lambda t: (order[t["status"]], size_rank(t)))
+        v["scarce"] += mainline[:2]
+    v["needs"].sort(key=lambda t: (attn_rank(t), t["project"]))
+    for key in ("abundant", "gpu"):
+        v[key].sort(key=lambda t: ("mainline" not in t["labels"], bool(set(t["labels"]) & set(ATTN)), size_rank(t)))
+    return v
+
+
+def attn_rank(t):
+    return min([list(ATTN).index(x) for x in t.get("labels") or [] if x in ATTN] or [len(ATTN)])
+
+
+def size_rank(t):
+    return min([SIZE_ORDER[x] for x in t.get("labels") or [] if x in SIZE_ORDER] or [len(SIZE_ORDER)])
+
+
+def task_tags(t):
+    labels = t.get("labels") or []
+    tags = [NEEDS[x] for x in labels if x in NEEDS] + [ATTN[x] for x in labels if x in ATTN]
+    tags += [x for x in labels if x in SIZE_ORDER or x in ("mainline", "gpu")]
+    if t["status"] == "Waiting" and not set(labels) & set(NEEDS):
+        tags.append("缺少 needs-human 标签，按待判断处理")
+    return tags
+
+
+def task_card(t, roots, detail=False):
+    warn = '<span class="tag warn">不可逆</span>' if "irreversible" in (t.get("labels") or []) else ""
+    desc = f'<div class="muted">{e(t.get("description"))}</div>' if detail else ""
+    src = source_links(t["sources"], roots[t["project"]]) if t["sources"] else '<span class="muted">任务文件未知</span>'
+    return (f'<div class="card"><span class="tag">{e(t["project"])}</span><span class="tag">{e(t["id"])}</span>{warn}'
+            f'<b>{e(t["title"])}</b><div>{"".join(f"<span class=tag>{e(x)}</span>" for x in task_tags(t))}'
+            f'<span class="muted">{e(t["status"])}</span></div>{desc}<div class="muted">{src}</div></div>')
 
 
 def project_warnings(p):
     git = p.get("git") or {}
     backlog = p.get("backlog") or {}
     warnings = list(git.get("errors", []))
+    warnings += (p.get("backlog_tasks") or {}).get("errors", [])
     if backlog.get("error"):
         warnings.append(backlog["error"])
     if backlog.get("truncated"):
@@ -151,13 +230,26 @@ def section(title, items, row, empty):
 def render_page(b):
     roots = {p["alias"]: p["path"] for p in b["projects"]}
     decisions = sorted(b.get("decisions", []), key=lambda d: (d.get("group") or "", d.get("project") or ""))
+    v = task_views(b)
+    cap = b.get("capacity")
+    cap_line = f'远端模型额度：{CAPACITY[cap]}（用户说明）' if cap else "远端模型额度：未说明，按紧张处理"
+    in_flight = "、".join(f"{k} {n} 条" for k, n in v["in_flight"].items()) or "无"
+    needs_html = "".join(task_card(t, roots) for t in v["needs"])
     page = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Portfolio brief</title><style>{CSS}</style></head><body><main>
 <h1>Attune 项目总览</h1><div class="muted">生成于 {e(b.get('generated_at'))} · 只读汇总 · 后续请求由原项目执行者接续，本页不自动派单</div>
-<div class="muted">{len(b['projects'])} 个项目 · {len(decisions)} 条待决定事项 · {len(b.get('feedback', []))} 条自然使用反馈 · {len(b.get('parked', []))} 条默认停放事项 · {len(b.get('advisory', []))} 条建议；覆盖及重要遗漏尚未获用户确认。</div>
-{section("需要你判断的事", decisions, lambda d: f'<div class="card"><span class="tag">{e(d.get("project"))}</span>{f"<span class=tag>{e(d.get('group'))}</span>" if d.get("group") else ""}<b>{e(d.get("question"))}</b><div class="muted">为什么现在：{e(d.get("why_now"))} · 不处理会怎样：{e(d.get("if_wait"))}</div><div class="muted">{source_links(d["sources"], roots[d["project"]])}</div></div>', "没有发现需要你判断的事（不代表没有，只是来源里没看到）")}
-{section("自然使用时再反馈", b.get("feedback", []), lambda f: f'<div class="card"><span class="tag">{e(f["project"])}</span>{e(f["question"])}<div class="muted">{e(f["when"])}</div><div class="muted">{source_links(f["sources"], roots[f["project"]])}</div></div>', "本次未单列使用反馈")}
-{section("默认停放", b.get("parked", []), lambda p: f'<div class="card"><span class="tag">{e(p["project"])}</span>{e(p["item"])}<div class="muted">默认：{e(p["default"])}</div><div class="muted">{source_links(p["sources"], roots[p["project"]])}</div></div>', "本次未单列停放事项")}
+<div class="muted">{len(b['projects'])} 个项目 · {len(decisions) + len(v['needs'])} 条待决定事项 · {len(b.get('feedback', [])) + len(v['feedback'])} 条自然使用反馈 · {len(b.get('parked', [])) + len(v['parked'])} 条默认停放事项 · {len(b.get('advisory', []))} 条建议；覆盖及重要遗漏尚未获用户确认。</div>
+<div class="muted">{cap_line} · 在途注意力（进行中且交付后要人）：{in_flight}</div>
+{f'<h2>需要你（来自任务状态，按轻重排）</h2>{needs_html}' if needs_html else ''}
+{section("远端额度紧张时只做这些（各项目主线下一步）", v["scarce"], lambda t: task_card(t, roots), "没有标为主线的可做任务")}
+{section("远端额度充裕时可推进（不需要你）", v["abundant"], lambda t: task_card(t, roots), "没有标为 agent-ready 且依赖已完成的任务")}
+{section("依赖本地 GPU（看 GPU 是否空闲，与远端额度无关）", v["gpu"], lambda t: task_card(t, roots), "没有")}
+{''.join(f'<div class="card"><span class="tag warn">标签冲突</span>{e(t["project"])} {e(t["id"])}：同时标了 agent-ready 和 irreversible，未列入可推进</div>' for t in v["conflicts"])}
+{section("需要你判断的事（来自文档）", decisions, lambda d: f'<div class="card"><span class="tag">{e(d.get("project"))}</span>{f"<span class=tag>{e(d.get('group'))}</span>" if d.get("group") else ""}<b>{e(d.get("question"))}</b><div class="muted">为什么现在：{e(d.get("why_now"))} · 不处理会怎样：{e(d.get("if_wait"))}</div><div class="muted">{source_links(d["sources"], roots[d["project"]])}</div></div>', "没有发现需要你判断的事（不代表没有，只是来源里没看到）")}
+{section("自然使用时再反馈", b.get("feedback", []), lambda f: f'<div class="card"><span class="tag">{e(f["project"])}</span>{e(f["question"])}<div class="muted">{e(f["when"])}</div><div class="muted">{source_links(f["sources"], roots[f["project"]])}</div></div>', "本次未单列使用反馈" if not v["feedback"] else "")}
+{"".join(task_card(t, roots) for t in v["feedback"])}
+{section("默认停放", b.get("parked", []), lambda p: f'<div class="card"><span class="tag">{e(p["project"])}</span>{e(p["item"])}<div class="muted">默认：{e(p["default"])}</div><div class="muted">{source_links(p["sources"], roots[p["project"]])}</div></div>', "本次未单列停放事项" if not v["parked"] else "")}
+{"".join(task_card(t, roots, detail=True) for t in v["parked"])}
 {section("不需要你也能推进的事（建议）", b.get("advisory", []), lambda a: f'<div class="card"><span class="tag">{e(a.get("project"))}</span>{e(a.get("work"))}<div class="muted">{e(a.get("why_no_human"))}</div></div>', "没有")}
 {section("风险提示", b.get("risks", []), lambda r: f'<div class="card"><span class="tag warn">{e(r.get("kind"))}</span><span class="tag">{e(r.get("project"))}</span>{e(r.get("detail"))}</div>', "没有")}
 <h2>各项目</h2>{"".join(project_card(p) for p in b.get("projects", []))}
@@ -182,27 +274,58 @@ def markdown_sources(sources, root):
         for s in sources)
 
 
+def markdown_task(t, roots, detail=False):
+    warn = "【不可逆】" if "irreversible" in (t.get("labels") or []) else ""
+    tags = "、".join(task_tags(t))
+    line = f'- **{md(t["project"])} {md(t["id"])}**{warn}：{md(t["title"])}（{md(t["status"])}{"；" + md(tags) if tags else ""}）'
+    if detail and t.get("description"):
+        line += f' {md(t["description"])}'
+    src = markdown_sources(t["sources"], roots[t["project"]]) if t["sources"] else "任务文件未知"
+    return [line, f'  {src}']
+
+
 def render_markdown(b):
     """A usable report, not just artifact counts; shares prepared facts with HTML."""
     roots = {p["alias"]: p["path"] for p in b["projects"]}
-    out = ["# Attune 项目汇报", "", f'生成于 {md(b["generated_at"])}。覆盖 {len(b["projects"])} 个既有白名单项目；只读汇总，覆盖完整性和用户收益未获确认。', "", "## 需要你决定", ""]
+    v = task_views(b)
+    cap = b.get("capacity")
+    out = ["# Attune 项目汇报", "", f'生成于 {md(b["generated_at"])}。覆盖 {len(b["projects"])} 个既有白名单项目；只读汇总，覆盖完整性和用户收益未获确认。',
+           "", f'远端模型额度：{CAPACITY[cap] + "（用户说明）" if cap else "未说明，按紧张处理"}。在途注意力（进行中且交付后要人）：{"、".join(f"{k} {n} 条" for k, n in v["in_flight"].items()) or "无"}。']
+    if v["needs"]:
+        out += ["", "## 需要你（来自任务状态，按轻重排）", ""]
+        for t in v["needs"]:
+            out += markdown_task(t, roots)
+    for title, key, empty in [("远端额度紧张时只做这些（各项目主线下一步）", "scarce", "没有标为主线的可做任务。"),
+                              ("远端额度充裕时可推进（不需要你）", "abundant", "没有标为 agent-ready 且依赖已完成的任务。"),
+                              ("依赖本地 GPU（看 GPU 是否空闲，与远端额度无关）", "gpu", "没有。")]:
+        out += ["", f"## {title}", ""]
+        for t in v[key]:
+            out += markdown_task(t, roots)
+        if not v[key]:
+            out.append(empty)
+    out += [f'- 标签冲突：{md(t["project"])} {md(t["id"])} 同时标了 agent-ready 和 irreversible，未列入可推进' for t in v["conflicts"]]
+    out += ["", "## 需要你决定（来自文档）", ""]
     for d in b.get("decisions", []):
         out += [f'- **{md(d["project"])}：{md(d.get("question"))}**',
                 f'  原因：{md(d.get("why_now"))}；等待时：{md(d.get("if_wait"))}。',
                 f'  {markdown_sources(d["sources"], roots[d["project"]])}']
     if not b.get("decisions"):
-        out.append("本次未确认需用户作出的决定；来源覆盖有限，不等于证明没有决定。")
+        out.append("文档中未确认需用户作出的决定；来源覆盖有限，不等于证明没有决定。" if v["needs"] else "本次未确认需用户作出的决定；来源覆盖有限，不等于证明没有决定。")
     out += ["", "## 自然使用反馈", ""]
     for f in b.get("feedback", []):
         out += [f'- **{md(f["project"])}**：{md(f["question"])}。{md(f["when"])}',
                 f'  {markdown_sources(f["sources"], roots[f["project"]])}']
-    if not b.get("feedback"):
+    for t in v["feedback"]:
+        out += markdown_task(t, roots)
+    if not b.get("feedback") and not v["feedback"]:
         out.append("本次未单列使用反馈。")
     out += ["", "## 默认停放", ""]
     for p in b.get("parked", []):
         out += [f'- **{md(p["project"])}**：{md(p["item"])}。默认：{md(p["default"])}',
                 f'  {markdown_sources(p["sources"], roots[p["project"]])}']
-    if not b.get("parked"):
+    for t in v["parked"]:
+        out += markdown_task(t, roots, detail=True)
+    if not b.get("parked") and not v["parked"]:
         out.append("本次未单列停放事项。")
     out += ["", "## 可推进建议", ""]
     for a in b.get("advisory", []):

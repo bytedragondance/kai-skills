@@ -75,6 +75,36 @@ class ScanTests(unittest.TestCase):
                     self.assertEqual(result["displayed_chars"], min(len(value or ""), 4000))
                     self.assertEqual(bool(result["error"]), value is None)
 
+    def test_backlog_tasks_read_through_cli_json(self):
+        listing = json.dumps({"tasks": [
+            {"id": "T-1", "title": "Open", "status": "Waiting", "labels": ["needs-human:decision"], "isReady": True},
+            {"id": "T-2", "title": "Closed", "status": "Done", "labels": [], "isReady": True},
+            {"id": "T-3", "title": "No detail", "status": "To Do", "labels": ["agent-ready"], "isReady": True}]})
+        detail = json.dumps({"task": {"dependencies": [], "path": "backlog/tasks/t-1 - Open.md", "description": "Why"}})
+
+        def fake(cmd, cwd):
+            return listing if cmd[2] == "list" else detail if cmd[2] == "T-1" else None
+        with patch.object(scan.os.path, "isdir", return_value=True), patch.object(scan, "run", side_effect=fake):
+            result = scan.backlog_tasks("/synthetic")
+        self.assertEqual([t["id"] for t in result["tasks"]], ["T-1", "T-3"])
+        self.assertEqual(result["tasks"][0]["path"], "backlog/tasks/t-1 - Open.md")
+        self.assertIsNone(result["tasks"][1]["dependencies"])
+        self.assertIn("T-3", result["errors"][0])
+
+    def test_backlog_tasks_absent_failed_and_truncated(self):
+        with patch.object(scan.os.path, "isdir", return_value=False):
+            self.assertIsNone(scan.backlog_tasks("/synthetic"))
+        with patch.object(scan.os.path, "isdir", return_value=True), patch.object(scan, "run", return_value=None):
+            result = scan.backlog_tasks("/synthetic")
+        self.assertIsNone(result["tasks"])
+        self.assertTrue(result["errors"])
+        many = json.dumps({"tasks": [{"id": f"T-{i}", "status": "To Do"} for i in range(scan.TASK_LIMIT + 1)]})
+        with patch.object(scan.os.path, "isdir", return_value=True), \
+                patch.object(scan, "run", side_effect=lambda cmd, cwd: many if cmd[2] == "list" else '{"task": {}}'):
+            result = scan.backlog_tasks("/synthetic")
+        self.assertTrue(result["truncated"])
+        self.assertEqual(len(result["tasks"]), scan.TASK_LIMIT)
+
     def test_subprocess_failure_and_timeout_stay_unknown(self):
         failures = [OSError("missing executable"), subprocess.TimeoutExpired("git", 20)]
         for error in failures:
@@ -200,6 +230,66 @@ class RenderTests(unittest.TestCase):
             (self.root / "link.md").symlink_to(target)
             with self.assertRaises(ValueError):
                 render.check_sources([{**self.source, "path": "link.md"}], str(self.root))
+
+    def add_tasks(self):
+        (self.root / "backlog" / "tasks").mkdir(parents=True)
+        specs = [
+            ("T-1", "Focus decision", "Waiting", ["needs-human:decision", "attn:focus", "mainline"], True),
+            ("T-2", "Light approval", "Waiting", ["needs-human:decision", "attn:light", "irreversible"], True),
+            ("T-3", "Use it once", "Waiting", ["needs-human:feedback", "attn:focus"], True),
+            ("T-4", "Unlabeled wait", "Waiting", [], True),
+            ("T-5", "Old option", "Parked", [], True),
+            ("T-6", "Big safe run", "To Do", ["agent-ready", "size:l"], True),
+            ("T-7", "Mainline prep", "To Do", ["agent-ready", "mainline", "size:s"], True),
+            ("T-8", "GPU batch", "To Do", ["agent-ready", "gpu"], True),
+            ("T-9", "Conflicting", "To Do", ["agent-ready", "irreversible"], True),
+            ("T-10", "Blocked", "To Do", ["agent-ready"], False),
+            ("T-11", "Building", "In Progress", ["mainline", "attn:read"], True)]
+        tasks = []
+        for tid, title, status, labels, ready in specs:
+            rel = f"backlog/tasks/{tid.lower()} - {title}.md"
+            (self.root / rel).write_text(f"---\nid: {tid}\n---\n")
+            tasks.append({"id": tid, "title": title, "status": status, "priority": "medium", "labels": labels,
+                          "isReady": ready, "updatedAt": "2026-10-18T12:00:00Z", "dependencies": [], "path": rel,
+                          "description": "Restart when needed" if status == "Parked" else None})
+        self.scan["projects"][0]["backlog_tasks"] = {"tasks": tasks, "truncated": False, "errors": []}
+
+    def test_backlog_tasks_classified_from_status_and_labels(self):
+        self.add_tasks()
+        b = render.prepare_brief(self.brief, self.scan)
+        v = render.task_views(b)
+        ids = lambda key: [t["id"] for t in v[key]]
+        self.assertEqual(ids("needs"), ["T-2", "T-1", "T-4"])
+        self.assertEqual(ids("feedback"), ["T-3"])
+        self.assertEqual(ids("parked"), ["T-5"])
+        self.assertEqual(ids("abundant"), ["T-7", "T-6"])
+        self.assertEqual(ids("gpu"), ["T-8"])
+        self.assertEqual(ids("conflicts"), ["T-9"])
+        self.assertEqual(ids("scarce"), ["T-11", "T-1"])
+        self.assertEqual(v["in_flight"], {"P1": 1})
+        self.assertNotIn("sources", self.scan["projects"][0]["backlog_tasks"]["tasks"][0])
+        page, report = render.render_page(b), render.render_markdown(b)
+        self.assertIn("4 条待决定事项 · 1 条自然使用反馈 · 1 条默认停放事项", page)
+        self.assertIn("缺少 needs-human 标签", page)
+        self.assertIn("不可逆", page)
+        self.assertIn("Restart when needed", page)
+        self.assertIn("未说明，按紧张处理", page)
+        self.assertIn("t-1%20-%20Focus%20decision.md#L1", page)
+        needs_md = report.split("## 需要你（来自任务状态", 1)[1].split("## 远端额度紧张", 1)[0]
+        self.assertNotIn("Use it once", needs_md)
+        self.assertIn("Light approval", needs_md.split("Focus decision")[0])
+        self.assertIn("Restart when needed", report)
+        self.assertIn("同时标了 agent-ready 和 irreversible", report)
+
+    def test_capacity_and_restated_backlog_items_are_validated(self):
+        self.add_tasks()
+        self.brief["capacity"] = "abundant"
+        self.assertIn("充裕（用户说明）", render.render_page(render.prepare_brief(self.brief, self.scan)))
+        for brief in [{**self.brief, "capacity": "lots"},
+                      {**self.brief, "decisions": [{"project": "P1", "question": "Dup", "sources": [
+                          {**self.source, "path": "backlog/tasks/t-1 - Focus decision.md", "line": 1}]}]}]:
+            with self.subTest(brief=brief.get("capacity")), self.assertRaises(ValueError):
+                render.prepare_brief(brief, self.scan)
 
     def test_cli_validates_before_writing(self):
         brief_path, scan_path = self.root / "brief.json", self.root / "scan.json"

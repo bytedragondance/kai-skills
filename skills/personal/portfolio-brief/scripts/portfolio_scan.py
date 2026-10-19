@@ -1,7 +1,8 @@
 """Read-only scan of the allowlisted projects. Prints JSON to stdout.
 
 Never writes to a project: git runs with GIT_OPTIONAL_LOCKS=0 so status
-does not refresh the index, and Backlog.md is only listed.
+does not refresh the index, and Backlog.md is only listed and read
+through its CLI (`task list --json`, `task <id> --json`).
 """
 import datetime as dt
 import json
@@ -12,6 +13,8 @@ import sys
 
 CONFIG = os.path.expanduser("~/.config/portfolio-brief/projects.json")
 BACKLOG_LIMIT = 4000
+TASK_LIMIT = 80
+DESCRIPTION_LIMIT = 400
 STATE_DOC = re.compile(r"(status|state|roadmap|plan|decision|adr|next|orientation|direction|handoff)", re.I)
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "build", "dist", "DerivedData", "__pycache__", ".build"}
 ENV = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"}
@@ -93,6 +96,36 @@ def backlog(path):
             "total_chars": len(out), "displayed_chars": min(len(out), BACKLOG_LIMIT), "error": None}
 
 
+def backlog_tasks(path):
+    """Open Backlog tasks with status and labels, via the CLI's JSON output (read-only).
+
+    None when the project has no Backlog. Failures stay explicit: tasks is None
+    when the listing fails; a task whose detail fails keeps its listing fields.
+    """
+    if not os.path.isdir(os.path.join(path, "backlog")):
+        return None
+    out = run(["backlog", "task", "list", "--json"], path)
+    try:
+        listed = json.loads(out)["tasks"]
+    except (TypeError, ValueError, KeyError):
+        return {"tasks": None, "truncated": False, "errors": ["Backlog JSON listing failed; task state unknown"]}
+    open_tasks = [t for t in listed if t.get("status") != "Done"]
+    result = {"tasks": [], "truncated": len(open_tasks) > TASK_LIMIT, "errors": []}
+    for t in open_tasks[:TASK_LIMIT]:
+        task = {key: t.get(key) for key in ("id", "title", "status", "priority", "labels", "isReady", "updatedAt")}
+        task.update(dependencies=None, description=None, path=None)
+        try:
+            detail = json.loads(run(["backlog", "task", t["id"], "--json"], path))["task"]
+            task.update(dependencies=detail.get("dependencies"), path=detail.get("path"),
+                        description=(detail.get("description") or "")[:DESCRIPTION_LIMIT] or None)
+        except (TypeError, ValueError, KeyError):
+            result["errors"].append(f"{t.get('id')}: task detail unavailable; dependencies and source unknown")
+        result["tasks"].append(task)
+    if result["truncated"]:
+        result["errors"].append(f"Only the first {TASK_LIMIT} of {len(open_tasks)} open tasks were read")
+    return result
+
+
 def main():
     if not os.path.exists(CONFIG):
         sys.exit(f"Missing allowlist: {CONFIG}. See the skill's 'Allowlist' section.")
@@ -107,6 +140,7 @@ def main():
             entry["git"] = git_info(path)
             entry["state_docs"] = state_docs(path)
             entry["backlog"] = backlog(path)
+            entry["backlog_tasks"] = backlog_tasks(path)
         out["projects"].append(entry)
     json.dump(out, sys.stdout, ensure_ascii=False, indent=1)
 

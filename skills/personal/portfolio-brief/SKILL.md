@@ -27,13 +27,24 @@ Use a fresh local temp directory for this request and retain its `scan.json` and
 - the Git state: branch, last commit, uncommitted counts, ahead/behind;
 - the instruction files present;
 - the most recently changed status, plan and decision docs;
-- the Backlog.md listing, when the project has one.
+- the Backlog.md listing, when the project has one;
+- for Backlog projects, every open task's status, labels, readiness, dependencies, file and short description (`backlog_tasks`), read through `backlog task list --json` and `backlog task <id> --json`.
 
-Git read failures remain `null` with an explanation, not zero. Backlog includes `text`, `truncated`, `total_chars`, `displayed_chars`, and `error`; truncation means coverage is incomplete. The scanner does not fetch remotes or identify active sessions. Commit age does not establish the age of uncommitted changes.
+Git read failures remain `null` with an explanation, not zero. Backlog includes `text`, `truncated`, `total_chars`, `displayed_chars`, and `error`; truncation means coverage is incomplete. `backlog_tasks` is `null` without a Backlog; a failed listing keeps `tasks: null` with an error, and a task whose detail fails keeps its listing fields with an error. The scanner does not fetch remotes or identify active sessions. Commit age does not establish the age of uncommitted changes.
 
 Done when every allowlisted project appears; a missing path is reported, not skipped.
 
 ## 2. Recover each project's state, briefly
+
+**Backlog projects** follow Attune's project task convention v0 (`docs/experiments/att-8-project-task-convention-v0.md` in the Attune repo). The renderer classifies their open tasks mechanically from status and labels:
+- `Waiting` with `needs-human:decision` or `needs-human:acceptance` goes to *needs you*, ordered `attn:light` → `attn:read` → `attn:focus`. A `Waiting` task with no `needs-human:*` label is flagged and kept there.
+- `Waiting` with `needs-human:feedback` goes to natural-use feedback.
+- `Parked` goes to parked, with its restart condition.
+- `To Do` + `agent-ready` with dependencies done goes to *when remote capacity is abundant*, mainline first. `gpu` tasks are listed separately, by local GPU availability rather than remote quota.
+- The next mainline steps per project go to *when remote capacity is scarce*.
+- `irreversible` is flagged wherever it appears; `agent-ready` + `irreversible` is shown as a label conflict.
+
+Do not restate these tasks as `decisions`, `feedback` or `parked` in the brief: the renderer rejects brief items that cite `backlog/tasks/` files. For Backlog projects, read the status document only for workstream narrative, `today`, unknowns and anything the tasks do not cover, and report label gaps as unknowns or risks rather than re-classifying them.
 
 Per project, read only what the scan points to:
 - the current-direction part of the instruction file;
@@ -55,7 +66,8 @@ Apply `advance-project`'s evidence rules:
 Write `$RUN_DIR/brief.json`:
 
 ```json
-{"projects": [{"alias": "P1",
+{"capacity": null,
+ "projects": [{"alias": "P1",
                "today": {"outcome": "One useful result", "mode": "feedback", "reason": "Why this is the right next step"},
                "workstreams": [{"name": "", "state": "", "next": "", "sources": []}], "unknowns": [""]}],
  "decisions": [{"project": "P1", "group": "", "question": "", "why_now": "", "if_wait": "",
@@ -68,6 +80,7 @@ Write `$RUN_DIR/brief.json`:
 ```
 
 Rules:
+- `capacity` is the remote model quota mode **as the user stated it** in this conversation: `"abundant"`, `"scarce"`, or `null` when unstated (rendered as "按紧张处理"). Do not guess it from usage.
 - Include every scan alias exactly once. Do not copy Git counts, commit facts, domain, or observation time into project entries: the renderer joins them directly from the scan and rejects copied fact fields. Do not restate those numbers in narrative text.
 - Give each project one useful `today` outcome and the evidence-based mode: `proceed` (within existing authorization), `feedback` (needs real use), or `paused` (do not start new work here). This is prioritization, not dispatch. If today's actual goal cannot be established, say so rather than inventing a deliverable.
 - Each decision needs a real project-relative source file and line, the source's stated date (`null` if unknown), and the actual timezone-qualified observation time. Do not substitute file modification time for a decision date. Workstream source links use the same shape. The renderer checks provenance structure and file boundaries, not the truth of the agent's interpretation; compare each decision with its cited passage before delivery.
